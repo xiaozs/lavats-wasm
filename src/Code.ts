@@ -1,5 +1,5 @@
 import { Block, BlockOption, IfBlock, IfOption, Instruction, instructionSet, LoopBlock } from './Instruction';
-import { F32, F64, I32, I64, InstructionType, U32 } from './Type';
+import { F32, F64, I32, I64, InstructionType, isI32, isI64, isIndex, U32, isF32, isF64, isV128, isBlockType, isU32Array } from './Type';
 
 export type Index = U32 | string;
 
@@ -288,23 +288,25 @@ function getNamespace(names: string[]): any {
     return res;
 }
 
-function validateArgs(args: any[], immediates: readonly any[]): boolean {
+function checkArgs(args: any[], immediates: readonly any[]) {
+    let fnMap: { [type: number]: (arg: any) => boolean } = {
+        [InstructionType.I32]: isI32,
+        [InstructionType.I64]: isI64,
+        [InstructionType.F32]: isF32,
+        [InstructionType.F64]: isF64,
+        [InstructionType.V128]: isV128,
+        [InstructionType.BlockType]: isBlockType,
+        [InstructionType.Array]: isU32Array,
+        [InstructionType.Index]: isIndex,
+    }
+
     for (let i = 0; i < args.length; i++) {
         let arg = args[i];
         let type = immediates[i];
-        switch (type) {
-            case InstructionType.I32:
-            case InstructionType.I64:
-            case InstructionType.F32:
-            case InstructionType.F64:
-            case InstructionType.V128:
-            case InstructionType.BlockType:
-            case InstructionType.Array:
-            case InstructionType.Index:
-        }
+        let fn = fnMap[type];
+        let isValidate = fn(arg);
+        if (!isValidate) throw new Error("输入有误");
     }
-    // todo
-    return true;
 }
 
 for (let text in instructionSet) {
@@ -315,8 +317,7 @@ for (let text in instructionSet) {
 
     if (instr.immediates.length) {
         namespace[name] = function (...args: any[]) {
-            let isValid = validateArgs(args, instr.immediates);
-            if (!isValid) throw new Error();
+            checkArgs(args, instr.immediates);
             return new Instruction(instr, args);
         }
     } else {
