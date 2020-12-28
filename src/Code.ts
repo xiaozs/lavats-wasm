@@ -1,7 +1,5 @@
-import { Block, BlockOption, IfBlock, IfOption, Instruction, instructionSet, LoopBlock } from './Instruction';
-import { F32, F64, I32, I64, InstructionType, isI32, isI64, isIndex, U32, isF32, isF64, isV128, isBlockType, isU32Array } from './Type';
-
-export type Index = U32 | string;
+import { Block, IfBlock, Instruction, instructionSet, LoopBlock } from './Instruction';
+import { F32, F64, I32, I64, Index, ImmediateType, isBlockType, isF32, isF64, isI32, isI64, isIndex, isIndexArray, isV128, U32, BlockOption, IfOption } from './Type';
 
 export declare const unreachable: Instruction;
 export declare const nop: Instruction;
@@ -274,7 +272,7 @@ export declare namespace i64 {
 
 
 function getName(name: string): string {
-    let keywords = ["trye", "catch", "if", "else", "return", "throw", "null", "const"];
+    let keywords = ["try", "catch", "if", "else", "return", "throw", "null", "const"];
     let isKeyWords = keywords.includes(name);
     return isKeyWords ? name.replace(/^\w/, $$ => $$.toUpperCase()) : name;
 }
@@ -290,14 +288,14 @@ function getNamespace(names: string[]): any {
 
 function checkArgs(args: any[], immediates: readonly any[]) {
     let fnMap: { [type: number]: (arg: any) => boolean } = {
-        [InstructionType.I32]: isI32,
-        [InstructionType.I64]: isI64,
-        [InstructionType.F32]: isF32,
-        [InstructionType.F64]: isF64,
-        [InstructionType.V128]: isV128,
-        [InstructionType.BlockType]: isBlockType,
-        [InstructionType.Array]: isU32Array,
-        [InstructionType.Index]: isIndex,
+        [ImmediateType.I32]: isI32,
+        [ImmediateType.I64]: isI64,
+        [ImmediateType.F32]: isF32,
+        [ImmediateType.F64]: isF64,
+        [ImmediateType.V128]: isV128,
+        [ImmediateType.BlockType]: isBlockType,
+        [ImmediateType.IndexArray]: isIndexArray,
+        [ImmediateType.Index]: isIndex,
     }
 
     for (let i = 0; i < args.length; i++) {

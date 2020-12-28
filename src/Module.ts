@@ -1,154 +1,9 @@
-import { Index } from './Code';
-import { BlockLinker, Instruction, Stack } from './Instruction';
-import { ImportExportType, F32, F64, I32, I64, Type, U32, ElementType, isU32, isI32, isI64, isF32, isF64 } from './Type';
+import { Env } from './Env';
+import { ImportExportType, isF32, isF64, isI32, isI64, isU32, LimitOption, ModuleOption, Type, U32 } from './Type';
 
-
-export interface FunctionOption {
-    name?: string;
-    params?: ({ name: string, type: Type } | Type)[];
-    results?: Type[];
-    locals?: ({ name: string, type: Type } | Type)[];
-    codes?: Instruction[];
-}
-
-export class Func {
-    get name() {
-        return this.options.name;
-    }
-    constructor(private options: FunctionOption) { }
-    private checkNames() {
-        let map: Record<string, number> = {};
-
-        let params = this.options.params || [];
-        let locals = this.options.locals || [];
-        let vals = [...params, ...locals];
-
-        for (let val of vals) {
-            if (typeof val !== "object") continue;
-            let name = val.name;
-            let count = map[name] = (map[name] ?? 0) + 1;
-            if (count >= 2) throw new Error(`local ${name}: 命名冲突`);
-        }
-    }
-    check(env: CheckEnv) {
-        this.checkNames();
-
-        let type = this.getType();
-        let stack = new Stack();
-        let codes = this.options.codes || [];
-        let linker = new BlockLinker(this);
-        for (let code of codes) {
-            code.check(env, stack, this, linker);
-        }
-        if (stack.length !== type.results.length) throw new Error("出参不匹配");
-        stack.checkStackTop(type.results, false);
-    }
-    getType(): TypeOption {
-        let { name, params = [], results = [] } = this.options;
-        let res: Type[] = [];
-        for (let p of params) {
-            if (typeof p === "object") {
-                res.push(p.type);
-            } else {
-                res.push(p);
-            }
-        }
-        return { name, params: res, results };
-    }
-    getLocal(index: Index): Type | undefined {
-        let map: Record<string, Type> = {};
-        let arr: Type[] = [];
-
-        let params = this.options.params || [];
-        let locals = this.options.locals || [];
-        let vals = [...params, ...locals];
-
-        for (let val of vals) {
-            if (typeof val === "object") {
-                map[val.name] = val.type;
-                arr.push(val.type);
-            } else {
-                arr.push(val);
-            }
-        }
-
-        if (typeof index === "string") {
-            return map[index];
-        } else {
-            return arr[index];
-        }
-    }
-}
-
-export interface MemoryOption {
-    name?: string;
-    min: U32;
-    max?: U32;
-}
-export interface DataOption {
-    name?: string;
-    memoryIndex: Index;
-    offset: U32;
-    init: ArrayBuffer;
-}
-export interface TableOption {
-    name?: string;
-    elementType: ElementType;
-    min: U32;
-    max?: U32;
-}
-export interface ElementOption {
-    name?: string;
-    tableIndex: Index;
-    offset: U32;
-    functionIndexes: Index[];
-}
-
-export interface Limit {
-    min: U32;
-    max?: U32;
-}
-
-export type ImportOption =
-    { name?: string, module: string, importName: string } &
-    (
-        | { type: ImportExportType.Function, params?: Type[], results?: Type[] }
-        | { type: ImportExportType.Table, elementType: ElementType, min: U32, max?: U32 }
-        | { type: ImportExportType.Memory, min: U32, max?: U32 }
-        | { type: ImportExportType.Global, globalType: Type, mutable?: boolean }
-    );
-
-export interface ExportOption {
-    exportName: string;
-    type: ImportExportType;
-    index: Index;
-}
-export interface TypeOption {
-    name?: string;
-    params: Type[];
-    results: Type[];
-}
-
-export type GlobalOption =
-    | { name?: string, globalType: Type.I32, mutable?: boolean, init: I32 }
-    | { name?: string, globalType: Type.I64, mutable?: boolean, init: I64 }
-    | { name?: string, globalType: Type.F32, mutable?: boolean, init: F32 }
-    | { name?: string, globalType: Type.F64, mutable?: boolean, init: F64 }
-
-export interface ModuleOption {
-    name?: string;
-    memory: MemoryOption[];
-    data: DataOption[];
-    table: TableOption[];
-    element: ElementOption[];
-    import: ImportOption[];
-    export: ExportOption[];
-    type: TypeOption[];
-    global: GlobalOption[];
-    function: Func[];
-    start?: Index;
-}
-
+/**
+ * 获取模块默认配置的函数
+ */
 function getDefaultOption(): Readonly<ModuleOption> {
     return {
         name: undefined,
@@ -165,98 +20,25 @@ function getDefaultOption(): Readonly<ModuleOption> {
     }
 }
 
-export class CheckEnv {
-    private functions = this.get(ImportExportType.Function);
-    private tables = this.get(ImportExportType.Table);
-    private memories = this.get(ImportExportType.Memory);
-    private globals = this.get(ImportExportType.Global);
-    private types = this.getType();
-
-    constructor(private option: ModuleOption) { }
-    find(type: ImportExportType.Function, index: Index): TypeOption | undefined;
-    find(type: ImportExportType.Global, index: Index): Omit<GlobalOption, "init"> | undefined;
-    find(type: ImportExportType.Memory, index: Index): MemoryOption | undefined;
-    find(type: ImportExportType.Table, index: Index): TableOption | undefined;
-    find(type: ImportExportType, index: Index): any | undefined;
-    find(type: ImportExportType, index: Index) {
-        let typeMap = {
-            [ImportExportType.Function]: this.functions,
-            [ImportExportType.Global]: this.globals,
-            [ImportExportType.Memory]: this.memories,
-            [ImportExportType.Table]: this.tables,
-        }
-        let arr: { name?: string }[] = typeMap[type];
-        if (typeof index === "string") {
-            return arr.find(it => it.name === index)
-        } else {
-            return arr[index];
-        }
-    }
-    findType(index: Index): TypeOption | undefined {
-        if (typeof index === "string") {
-            return this.types.find(it => it.name === index)
-        } else {
-            return this.types[index];
-        }
-    }
-    getType(): TypeOption[] {
-        let types = this.option.type;
-
-        let funcTypes = this.functions.map(it => ({ ...it, name: undefined }));
-        for (let it of funcTypes) {
-            let isInArr = types.some(t => this.isSameType(t, it));
-            if (!isInArr) continue;
-
-            types.push(it);
-        }
-
-        return types;
-    }
-    private isSameType(t1: TypeOption, t2: TypeOption) {
-        if (t1.params.length !== t2.params.length) return false;
-        if (t1.results.length !== t2.params.length) return false;
-
-        for (let i = 0; i < t1.params.length; i++) {
-            let p1 = t1.params[i];
-            let p2 = t2.params[i];
-            if (p1 !== p2) return false;
-        }
-
-        for (let i = 0; i < t1.results.length; i++) {
-            let r1 = t1.results[i];
-            let r2 = t2.results[i];
-            if (r1 !== r2) return false;
-        }
-
-        return true;
-    }
-    private get(type: ImportExportType.Function): TypeOption[];
-    private get(type: ImportExportType.Global): Omit<GlobalOption, "init">[];
-    private get(type: ImportExportType.Memory): MemoryOption[];
-    private get(type: ImportExportType.Table): TableOption[];
-    private get(type: ImportExportType): any[] {
-        let imports = this.option.import.filter(it => it.type === type);
-        let nameMap = {
-            [ImportExportType.Function]: this.option.function,
-            [ImportExportType.Global]: this.option.global,
-            [ImportExportType.Memory]: this.option.memory,
-            [ImportExportType.Table]: this.option.table,
-        }
-        let inners = nameMap[type];
-        if (type === ImportExportType.Function) {
-            let types = (inners as Func[]).map(it => it.getType());
-            return [...imports, ...types];
-        } else {
-            return [...imports, ...inners];
-        }
-    }
-}
-
+/**
+ * 模块
+ */
 export class Module {
+    /**
+     * 模块的配置
+     */
     private option: ModuleOption;
+
+    /**
+     * @param option 模块的配置
+     */
     constructor(option: Partial<ModuleOption>) {
         this.option = Object.assign(getDefaultOption(), option);
     }
+
+    /**
+     * 验证模块是否合法，返回布尔值
+     */
     validate(): boolean {
         try {
             this.check();
@@ -266,6 +48,9 @@ export class Module {
         }
     }
 
+    /**
+     * 验证模块是否合法，非法时抛出异常
+     */
     check() {
         this.checkNames();
         this.checkImport();
@@ -273,18 +58,28 @@ export class Module {
         this.checkMemory();
         this.checkGlobal();
 
-        let env = new CheckEnv(this.option);
+        let env = new Env(this.option);
         this.checkExport(env);
         this.checkStart(env);
         this.checkElement(env);
         this.checkFunction(env);
         this.checkData(env);
     }
-    private checkLimit({ min, max }: Limit) {
+
+    /**
+     * 检查Limit配置项的辅助方法
+     * @param param0 Limit配置
+     */
+    private checkLimit({ min, max }: LimitOption) {
         if (!isU32(min)) throw new Error("min不是u32");
         if (max !== undefined && !isU32(max)) throw new Error("max不是u32");
         if (max !== undefined && min > max) throw new Error("min > max");
     }
+
+    /**
+     * 检查Limit配置项的辅助方法
+     * @param type 类型
+     */
     private checkLimitOf(type: "table" | "memory") {
         let arr = this.option[type];
         for (let i = 0; i < arr.length; i++) {
@@ -296,6 +91,10 @@ export class Module {
             }
         }
     }
+
+    /**
+     * 检查命名冲突的方法
+     */
     private checkNames() {
         for (let key in this.option) {
             let arr: { name?: string }[] = (this.option as any)[key];
@@ -314,6 +113,10 @@ export class Module {
             }
         }
     }
+
+    /**
+     * 检查导入项的方法
+     */
     private checkImport() {
         for (let i = 0; i < this.option.import.length; i++) {
             let it = this.option.import[i];
@@ -328,12 +131,24 @@ export class Module {
             }
         }
     }
+
+    /**
+     * 检查表格项
+     */
     private checkTable() {
         this.checkLimitOf("table");
     }
+
+    /**
+     * 检查内存项
+     */
     private checkMemory() {
         this.checkLimitOf("memory");
     }
+
+    /**
+     * 检查全局变量项
+     */
     private checkGlobal() {
         let fnMap = {
             [Type.I32]: isI32,
@@ -351,7 +166,12 @@ export class Module {
             }
         }
     }
-    private checkExport(env: CheckEnv) {
+
+    /**
+     * 检查导出项
+     * @param env 环境上下文对象
+     */
+    private checkExport(env: Env) {
         let nameMap: Record<string, U32[]> = {};
         for (let i = 0; i < this.option.export.length; i++) {
             let it = this.option.export[i];
@@ -371,34 +191,54 @@ export class Module {
             if (!obj) throw new Error(`export ${i}: 没找到导出对象`)
         }
     }
-    private checkStart(env: CheckEnv) {
+
+    /**
+     * 检查开始函数
+     * @param env 环境上下文对象
+     */
+    private checkStart(env: Env) {
         let { start } = this.option;
         if (start === undefined) return;
-        let obj = env.find(ImportExportType.Function, start);
+        let obj = env.findFunction(start);
         if (!obj) throw new Error(`start: 没找到func ${start}`)
     }
-    private checkElement(env: CheckEnv) {
+
+    /**
+     * 检查元素项
+     * @param env 环境上下文对象
+     */
+    private checkElement(env: Env) {
         for (let i = 0; i < this.option.element.length; i++) {
             let it = this.option.element[i];
-            let table = env.find(ImportExportType.Table, it.tableIndex);
+            let table = env.findTable(it.tableIndex);
             if (!table) throw new Error(`elememt ${i}: 没找到table ${it.tableIndex}`);
 
             for (let idx of it.functionIndexes) {
-                let func = env.find(ImportExportType.Function, idx);
+                let func = env.findFunction(idx);
                 if (!func) throw new Error(`elememt ${i}: 没找到func ${idx}`);
             }
         }
     }
-    private checkFunction(env: CheckEnv) {
+
+    /**
+     * 检查函数项
+     * @param env 环境上下文对象
+     */
+    private checkFunction(env: Env) {
         for (let i = 0; i < this.option.function.length; i++) {
             let func = this.option.function[i];
             func.check(env);
         }
     }
-    private checkData(env: CheckEnv) {
+
+    /**
+     * 检查数据项
+     * @param env 环境上下文对象
+     */
+    private checkData(env: Env) {
         for (let i = 0; i < this.option.data.length; i++) {
             let it = this.option.data[i];
-            let memory = env.find(ImportExportType.Memory, it.memoryIndex);
+            let memory = env.findMemory(it.memoryIndex);
             if (!memory) throw new Error(`data ${i}: 没找到memory ${it.memoryIndex}`);
         }
     }
@@ -409,6 +249,8 @@ export class Module {
 }
 
 export interface Module extends ModuleOption { }
+
+// 为模块添加各个项目的getter和setter
 
 let keys = Object.keys(getDefaultOption());
 let props: any = {};
