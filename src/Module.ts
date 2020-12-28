@@ -1,5 +1,5 @@
 import { Index } from './Code';
-import { BranchError, Instruction, RetrunError, UnreachableError } from './Instruction';
+import { BlockLinker, Instruction, Stack } from './Instruction';
 import { ImportExportType, F32, F64, I32, I64, Type, U32, ElementType, isU32, isI32, isI64, isF32, isF64 } from './Type';
 
 
@@ -12,6 +12,9 @@ export interface FunctionOption {
 }
 
 export class Func {
+    get name() {
+        return this.options.name;
+    }
     constructor(private options: FunctionOption) { }
     private checkNames() {
         let map: Record<string, number> = {};
@@ -31,21 +34,14 @@ export class Func {
         this.checkNames();
 
         let type = this.getType();
-        let stack = [...type.params];
+        let stack = new Stack();
         let codes = this.options.codes || [];
+        let linker = new BlockLinker(this);
         for (let code of codes) {
-            try {
-                code.check(env, stack, this);
-            } catch (e) {
-                // todo
-                // if (e instanceof UnreachableError) return;
-                // if (e instanceof BranchError) return;
-                // if (e instanceof RetrunError) return;
-
-                throw e;
-            }
+            code.check(env, stack, this, linker);
         }
-        // todo，判断stack出参
+        if (stack.length !== type.results.length) throw new Error("出参不匹配");
+        stack.checkStackTop(type.results, false);
     }
     getType(): TypeOption {
         let { name, params = [], results = [] } = this.options;
@@ -174,6 +170,8 @@ export class CheckEnv {
     private tables = this.get(ImportExportType.Table);
     private memories = this.get(ImportExportType.Memory);
     private globals = this.get(ImportExportType.Global);
+    private types = this.getType();
+
     constructor(private option: ModuleOption) { }
     find(type: ImportExportType.Function, index: Index): TypeOption | undefined;
     find(type: ImportExportType.Global, index: Index): Omit<GlobalOption, "init"> | undefined;
@@ -194,8 +192,43 @@ export class CheckEnv {
             return arr[index];
         }
     }
-    findType(index: Index): TypeOption {
-        // todo,
+    findType(index: Index): TypeOption | undefined {
+        if (typeof index === "string") {
+            return this.types.find(it => it.name === index)
+        } else {
+            return this.types[index];
+        }
+    }
+    getType(): TypeOption[] {
+        let types = this.option.type;
+
+        let funcTypes = this.functions.map(it => ({ ...it, name: undefined }));
+        for (let it of funcTypes) {
+            let isInArr = types.some(t => this.isSameType(t, it));
+            if (!isInArr) continue;
+
+            types.push(it);
+        }
+
+        return types;
+    }
+    private isSameType(t1: TypeOption, t2: TypeOption) {
+        if (t1.params.length !== t2.params.length) return false;
+        if (t1.results.length !== t2.params.length) return false;
+
+        for (let i = 0; i < t1.params.length; i++) {
+            let p1 = t1.params[i];
+            let p2 = t2.params[i];
+            if (p1 !== p2) return false;
+        }
+
+        for (let i = 0; i < t1.results.length; i++) {
+            let r1 = t1.results[i];
+            let r2 = t2.results[i];
+            if (r1 !== r2) return false;
+        }
+
+        return true;
     }
     private get(type: ImportExportType.Function): TypeOption[];
     private get(type: ImportExportType.Global): Omit<GlobalOption, "init">[];
