@@ -1,4 +1,4 @@
-import { Func } from './Func';
+import type { Func } from './Func';
 import { GlobalOption, ImportExportType, Index, MemoryOption, ModuleOption, TableOption, TypeOption } from './Type';
 
 /**

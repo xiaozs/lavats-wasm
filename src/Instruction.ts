@@ -1,7 +1,8 @@
-import { Env } from "./Env";
-import { Func } from "./Func";
+import type { Env } from "./Env";
+import type { Func } from "./Func";
 import { Stack } from './Stack';
 import { BlockType, Index, ImmediateType, Type, TypeOption, InstructionOption, CheckOption, BlockOption, IfOption } from './Type';
+import { encodeInt } from './utils';
 
 /**
  * 用于处理指令的code字段，该字段如果有第二个数，将第二个数编码为LEB128
@@ -10,10 +11,16 @@ import { BlockType, Index, ImmediateType, Type, TypeOption, InstructionOption, C
 function encode(instrs: InstructionOption[]): InstructionOption[] {
     let res: InstructionOption[] = [];
     for (let it of instrs) {
+        let code = it.code;
+        if (it.code.length >= 2) {
+            let buffer = encodeInt(it.code[1]);
+            let view = new Uint8Array(buffer);
+            code = [code[0], ...view];
+        }
+
         res.push({
             ...it,
-            // todo
-            code: it.code.length >= 2 ? [it.code[0]] : it.code,
+            code,
         });
     }
     return res;
@@ -28,6 +35,8 @@ export const instructions: readonly InstructionOption[] = encode([
     { name: "block", code: [0x02], immediates: [ImmediateType.BlockType], check() { throw new Error("库代码有误") } },
     { name: "loop", code: [0x03], immediates: [ImmediateType.BlockType], check() { throw new Error("库代码有误") } },
     { name: "if", code: [0x04], immediates: [ImmediateType.BlockType], check() { throw new Error("库代码有误") } },
+    { name: "else", code: [0x05], immediates: [], params: [], results: [] },
+    { name: "end", code: [0x0b], immediates: [], params: [], results: [] },
     {
         name: "br",
         code: [0x0C], immediates: [ImmediateType.Index],

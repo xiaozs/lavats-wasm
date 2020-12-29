@@ -138,11 +138,11 @@ export enum Type {
  * 指令立即数的类型
  */
 export enum ImmediateType {
-    I32 = -0x01,
-    I64 = -0x02,
-    F32 = -0x03,
-    F64 = -0x04,
-    V128 = -0x05,
+    I32,
+    I64,
+    F32,
+    F64,
+    V128,
     BlockType,
     IndexArray,
     Index
@@ -615,4 +615,27 @@ export interface IfOption {
      * false分支代码
      */
     else?: Instruction[];
+}
+
+
+export enum FuncType {
+    func = -0x20,
+}
+
+/**
+ * 段类型
+ */
+export enum SectionType {
+    CustomSection = 0,
+    TypeSection = 1,
+    ImportSection = 2,
+    FunctionSection = 3,
+    TableSection = 4,
+    MemorySection = 5,
+    GlobalSection = 6,
+    ExportSection = 7,
+    StartSection = 8,
+    ElementSection = 9,
+    CodeSection = 10,
+    DataSection = 11
 }

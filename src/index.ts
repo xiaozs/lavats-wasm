@@ -1,5 +1,7 @@
+import { type } from 'os';
+
 export * as Code from "./Code";
 export * from "./Module";
-export * from "./Instruction";
+export type { Instruction, Block, LoopBlock, IfBlock } from "./Instruction";
 export * from "./Type";
 export * from "./Func";

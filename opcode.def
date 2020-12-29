@@ -13,13 +13,11 @@
  *          tr    t1    t2    t3    m  prefix code  Name text
  * ==========================================================  */
 
-WABT_OPCODE(___,  ___,  ___,  ___,  0,  0,    0x05, Else, "else", "")
 WABT_OPCODE(___,  ___,  ___,  ___,  0,  0,    0x06, Try, "try", "")
 WABT_OPCODE(___,  ___,  ___,  ___,  0,  0,    0x07, Catch, "catch", "")
 WABT_OPCODE(___,  ___,  ___,  ___,  0,  0,    0x08, Throw, "throw", "")
 WABT_OPCODE(___,  ___,  ___,  ___,  0,  0,    0x09, Rethrow, "rethrow", "")
 WABT_OPCODE(___,  ___,  ___,  ___,  0,  0,    0x0a, BrOnExn, "br_on_exn", "")
-WABT_OPCODE(___,  ___,  ___,  ___,  0,  0,    0x0b, End, "end", "")
 
 WABT_OPCODE(___,  ___,  ___,  ___,  0,  0,    0x12, ReturnCall, "return_call", "")
 WABT_OPCODE(___,  ___,  ___,  ___,  0,  0,    0x13, ReturnCallIndirect, "return_call_indirect", "")
