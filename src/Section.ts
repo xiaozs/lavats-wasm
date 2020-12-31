@@ -419,9 +419,8 @@ export class LocalNameSubSection extends NameSubSection {
  */
 export class LabelNameSubSection extends NameSubSection {
     readonly type = NameType.Label;
-    // todo
-    @buf(false)
-    buffer!: ArrayBuffer;
+    @obj(IndirectNameMap)
+    names!: IndirectNameMap;
 }
 /**
  * 类型名子段
