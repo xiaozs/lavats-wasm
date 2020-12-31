@@ -419,41 +419,55 @@ export class LocalNameSubSection extends NameSubSection {
  */
 export class LabelNameSubSection extends NameSubSection {
     readonly type = NameType.Label;
-
+    // todo
+    @buf(false)
+    buffer!: ArrayBuffer;
 }
 /**
  * 类型名子段
  */
 export class TypeNameSubSection extends NameSubSection {
     readonly type = NameType.Type;
+    @obj(NameMap)
+    names!: NameMap;
 }
 /**
  * 表格名子段
  */
 export class TableNameSubSection extends NameSubSection {
     readonly type = NameType.Table;
+    @obj(NameMap)
+    names!: NameMap;
 }
 /**
  * 内存名子段
  */
 export class MemoryNameSubSection extends NameSubSection {
     readonly type = NameType.Memory;
+    @obj(NameMap)
+    names!: NameMap;
 }
 /**
  * 全局变量名子段
  */
 export class GlobalNameSubSection extends NameSubSection {
     readonly type = NameType.Global;
+    @obj(NameMap)
+    names!: NameMap;
 }
 /**
  * 元素名子段
  */
 export class ElementNameSubSection extends NameSubSection {
     readonly type = NameType.Element;
+    @obj(NameMap)
+    names!: NameMap;
 }
 /**
  * 数据名子段
  */
 export class DataNameSubSection extends NameSubSection {
     readonly type = NameType.Data;
+    @obj(NameMap)
+    names!: NameMap;
 }
