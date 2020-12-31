@@ -1,26 +1,22 @@
-import { array, arrayInt, buf, decodeUint, decodeObject, expr, int, notIgnore, numberMap, obj, objMap, Offset, size, str, sInt, arraySint } from './encode';
-import type { Module } from './Module';
-import { ElementType, FuncType, ImportExportType, SectionType, Type, U32 } from './Type';
+import { array, arrayInt, buf, expr, uint, notIgnore, numberMap, obj, objMap, size, str, sint, arraySint, decodeObject } from './encode';
+import { NameSection } from './InnerModule';
+import { ElementType, FuncType, ImportExportType, NameType, SectionType, Type, U32 } from './Type';
 
 /**
  * 段
  */
-abstract class Section {
-    /**
-     * 段类型
-     */
+export abstract class Section {
+    @uint
     abstract readonly type: SectionType;
-    abstract readonly size: number;
+    @size
+    readonly size!: number;
 }
 
 /**
  * 自定义段
  */
-class CustomSection extends Section {
-    @int
+export class CustomSection extends Section {
     readonly type = SectionType.CustomSection;
-    @size
-    readonly size!: number;
     /**
      * 自定义段名称
      */
@@ -31,13 +27,18 @@ class CustomSection extends Section {
      */
     @buf(false)
     buffer!: ArrayBuffer;
+
+    toNameSection(): NameSection {
+        if (this.name !== "name") throw new Error("此段并非名称段");
+        return NameSection.fromBuffer(this.buffer);
+    }
 }
 
 /**
  * 函数类型
  */
-class FunctionType {
-    @sInt
+export class FunctionType {
+    @sint
     type = FuncType.func;
     @arraySint
     params!: Type[];
@@ -48,11 +49,8 @@ class FunctionType {
 /**
  * 类型段
  */
-class TypeSection extends Section {
-    @int
+export class TypeSection extends Section {
     readonly type = SectionType.TypeSection;
-    @size
-    readonly size!: number;
     @array(FunctionType)
     functionTypes!: FunctionType[];
 }
@@ -60,40 +58,39 @@ class TypeSection extends Section {
 /**
  * 导入描述
  */
-abstract class ImportDesc {
+export abstract class ImportDesc {
+    @uint
     abstract type: ImportExportType;
 }
 
 /**
  * 导入函数描述
  */
-class FunctionImportDesc extends ImportDesc {
-    @int
+export class FunctionImportDesc extends ImportDesc {
     type = ImportExportType.Function;
-    @int
+    @uint
     typeIndex!: U32;
 }
 
 /**
  * 表格
  */
-class Table {
-    @sInt
+export class Table {
+    @sint
     elementType!: ElementType;
-    @int
+    @uint
     hasMax!: boolean;
-    @int
+    @uint
     min!: U32;
     @notIgnore("hasMax")
-    @int
+    @uint
     max?: U32;
 }
 
 /**
  * 导入表格描述
  */
-class TableImportDesc extends ImportDesc {
-    @int
+export class TableImportDesc extends ImportDesc {
     type = ImportExportType.Table;
     @obj(Table)
     table!: Table;
@@ -102,21 +99,20 @@ class TableImportDesc extends ImportDesc {
 /**
  * 内存
  */
-class Memory {
-    @int
+export class Memory {
+    @uint
     hasMax!: boolean;
-    @int
+    @uint
     min!: U32;
     @notIgnore("hasMax")
-    @int
+    @uint
     max?: U32;
 }
 
 /**
  * 导入内存描述
  */
-class MemoryImportDesc extends ImportDesc {
-    @int
+export class MemoryImportDesc extends ImportDesc {
     type = ImportExportType.Memory;
     @obj(Memory)
     memory!: Memory;
@@ -125,10 +121,10 @@ class MemoryImportDesc extends ImportDesc {
 /**
  * 全局变量
  */
-class Global {
-    @sInt
+export class Global {
+    @sint
     valueType!: Type;
-    @int
+    @uint
     mutable!: boolean;
     @numberMap("valueType")
     init!: number;
@@ -137,8 +133,7 @@ class Global {
 /**
  * 导入全局变量描述
  */
-class GlobalImportDesc extends ImportDesc {
-    @int
+export class GlobalImportDesc extends ImportDesc {
     type = ImportExportType.Global;
     @obj(Global)
     global!: Global;
@@ -147,7 +142,7 @@ class GlobalImportDesc extends ImportDesc {
 /**
  * 导入项
  */
-class Import {
+export class Import {
     @str
     module!: string;
     @str
@@ -165,11 +160,8 @@ class Import {
 /**
  * 导入段
  */
-class ImportSection extends Section {
-    @int
+export class ImportSection extends Section {
     readonly type = SectionType.ImportSection;
-    @size
-    readonly size!: number;
     @array(Import)
     imports!: Import[];
 }
@@ -177,11 +169,8 @@ class ImportSection extends Section {
 /**
  * 函数段
  */
-class FunctionSection extends Section {
-    @int
+export class FunctionSection extends Section {
     readonly type = SectionType.FunctionSection;
-    @size
-    readonly size!: number;
     @arrayInt
     typeIndex!: U32[];
 }
@@ -189,11 +178,8 @@ class FunctionSection extends Section {
 /**
  * 表格段
  */
-class TableSection extends Section {
-    @int
+export class TableSection extends Section {
     readonly type = SectionType.TableSection;
-    @size
-    readonly size!: number;
     @obj(Table)
     tables!: Table[];
 }
@@ -201,11 +187,8 @@ class TableSection extends Section {
 /**
  * 内存段
  */
-class MemorySection extends Section {
-    @int
+export class MemorySection extends Section {
     readonly type = SectionType.MemorySection;
-    @size
-    readonly size!: number;
     @array(Memory)
     memories!: Memory[];
 }
@@ -213,11 +196,8 @@ class MemorySection extends Section {
 /**
  * 全局段
  */
-class GlobalSection extends Section {
-    @int
+export class GlobalSection extends Section {
     readonly type = SectionType.GlobalSection;
-    @size
-    readonly size!: number;
     @array(Global)
     globals!: Global[];
 }
@@ -225,54 +205,51 @@ class GlobalSection extends Section {
 /**
  * 导出描述
  */
-abstract class ExportDesc {
+export abstract class ExportDesc {
+    @uint
     abstract type: ImportExportType;
 }
 
 /**
  * 导出函数描述
  */
-class FunctionExportDesc extends ExportDesc {
-    @int
+export class FunctionExportDesc extends ExportDesc {
     type = ImportExportType.Function;
-    @int
+    @uint
     functionIndex!: U32;
 }
 
 /**
  * 导出表格描述
  */
-class TableExportDesc extends ExportDesc {
-    @int
+export class TableExportDesc extends ExportDesc {
     type = ImportExportType.Table;
-    @int
+    @uint
     tableIndex!: U32;
 }
 
 /**
  * 导出内存描述
  */
-class MemoryExportDesc extends ExportDesc {
-    @int
+export class MemoryExportDesc extends ExportDesc {
     type = ImportExportType.Memory;
-    @int
+    @uint
     memoryIndex!: U32;
 }
 
 /**
  * 导出全局变量描述
  */
-class GlobalExportDesc extends ExportDesc {
-    @int
+export class GlobalExportDesc extends ExportDesc {
     type = ImportExportType.Global;
-    @int
+    @uint
     globalIndex!: U32;
 }
 
 /**
  * 导出项
  */
-class Export {
+export class Export {
     @str
     name!: string;
     @objMap({
@@ -287,11 +264,8 @@ class Export {
 /**
  * 导出段
  */
-class ExportSection extends Section {
-    @int
+export class ExportSection extends Section {
     readonly type = SectionType.ExportSection;
-    @size
-    readonly size!: number;
     @array(Export)
     exports !: Export[];
 }
@@ -299,20 +273,17 @@ class ExportSection extends Section {
 /**
  * 开始段
  */
-class StartSection extends Section {
-    @int
+export class StartSection extends Section {
     readonly type = SectionType.StartSection;
-    @size
-    readonly size!: number;
-    @int
+    @uint
     functionIndex!: U32;
 }
 
 /**
  * 元素项
  */
-class Element {
-    @int
+export class Element {
+    @uint
     tableIndex!: U32;
     @expr(Type.I32)
     offset!: U32;
@@ -323,11 +294,8 @@ class Element {
 /**
  * 元素段
  */
-class ElementSection extends Section {
-    @int
+export class ElementSection extends Section {
     readonly type = SectionType.ElementSection;
-    @size
-    readonly size!: number;
     @array(Element)
     elements!: Element[];
 }
@@ -335,17 +303,17 @@ class ElementSection extends Section {
 /**
  * 局部变量
  */
-class Local {
-    @int
+export class Local {
+    @uint
     count!: U32;
-    @sInt
+    @sint
     type!: Type;
 }
 
 /**
  * 代码项
  */
-class Code {
+export class Code {
     @size
     private size!: U32;
     @array(Local)
@@ -357,11 +325,8 @@ class Code {
 /**
  * 代码段
  */
-class CodeSection extends Section {
-    @int
+export class CodeSection extends Section {
     readonly type = SectionType.CodeSection;
-    @size
-    readonly size!: number;
     @array(Code)
     codes!: Code[];
 }
@@ -369,8 +334,8 @@ class CodeSection extends Section {
 /**
  * 数据项
  */
-class Data {
-    @int
+export class Data {
+    @uint
     memoryIndex!: U32;
     @expr(Type.I32)
     offset!: U32;
@@ -381,132 +346,114 @@ class Data {
 /**
  * 数据段
  */
-class DataSection extends Section {
-    @int
+export class DataSection extends Section {
     readonly type = SectionType.DataSection;
-    @size
-    readonly size!: number;
     @array(Data)
     datas!: Data[];
 }
 
-
-let sectionMap = {
-    [SectionType.CustomSection]: CustomSection,
-    [SectionType.TypeSection]: TypeSection,
-    [SectionType.ImportSection]: ImportSection,
-    [SectionType.FunctionSection]: FunctionSection,
-    [SectionType.TableSection]: TableSection,
-    [SectionType.MemorySection]: MemorySection,
-    [SectionType.GlobalSection]: GlobalSection,
-    [SectionType.ExportSection]: ExportSection,
-    [SectionType.StartSection]: StartSection,
-    [SectionType.ElementSection]: ElementSection,
-    [SectionType.CodeSection]: CodeSection,
-    [SectionType.CustomSection]: CustomSection,
-    [SectionType.DataSection]: DataSection,
+/**
+ * 名称子段
+ */
+export abstract class NameSubSection {
+    @uint
+    abstract readonly type: NameType;
+    @size
+    readonly size!: number;
 }
 
 /**
- * 内用模块
+ * 名称映射
  */
-export class InnerModule {
-    static magic = new Uint8Array([0x00, 0x61, 0x73, 0x6D]);
-    static version = new Uint8Array([0x01, 0x00, 0x00, 0x00]);
-
-    private constructor(private sections: Section[]) { }
-    static fromBuffer(buffer: ArrayBuffer): InnerModule {
-        let offset: Offset = { value: 0 };
-
-        this.checkMagic(buffer, offset);
-        this.checkVersion(buffer, offset);
-
-        let sections: Section[] = [];
-        while (true) {
-            if (buffer.byteLength === offset.value) break;
-
-            let type = this.getSectionType(buffer, offset);
-            let fn = sectionMap[type];
-            let section: Section = decodeObject(buffer, offset, fn);
-            sections.push(section);
-        }
-        return new InnerModule(sections);
-    }
-    static fromModule(module: Module): InnerModule {
-        let sections: Section[] = [
-            // todo
-        ];
-        let res = new InnerModule(sections);
-        return res;
-    }
-    toBuffer(): ArrayBuffer {
-        // todo,
-        throw new Error();
-    }
-    // toModule(): Module {
-
-    // }
-    private static checkMagic(buffer: ArrayBuffer, offset: Offset) {
-        let length = InnerModule.magic.byteLength;
-        let view = new Uint8Array(buffer);
-        for (let i = 0; i < length; i++) {
-            if (view[offset.value + i] !== InnerModule.magic[i]) throw new Error(`magic 不符合`);
-        }
-        offset.value += length
-    }
-    private static checkVersion(buffer: ArrayBuffer, offset: Offset) {
-        let length = InnerModule.version.byteLength;
-        let view = new Uint8Array(buffer);
-        for (let i = 0; i < length; i++) {
-            if (view[offset.value + i] !== InnerModule.version[i]) throw new Error(`version 不符合`);
-        }
-        offset.value += length
-    }
-    private static getSectionType(buffer: ArrayBuffer, offset: Offset) {
-        let org = offset.value;
-        let type: SectionType = decodeUint(buffer, offset);
-        offset.value = org;
-        return type;
-    }
+export class NameMap {
+    @uint
+    index!: U32;
+    @str
+    name!: string;
 }
 
-export interface InnerModule {
-    readonly typeSection?: TypeSection;
-    readonly importSection?: ImportSection;
-    readonly functionSection?: FunctionSection;
-    readonly tableSection?: TableSection;
-    readonly memorySection?: MemorySection;
-    readonly globalSection?: GlobalSection;
-    readonly exportSection?: ExportSection;
-    readonly startSection?: StartSection;
-    readonly elementSection?: ElementSection;
-    readonly codeSection?: CodeSection;
-    readonly dataSection?: DataSection;
+/**
+ * 简介名称关系
+ */
+export class IndirectNameAssociation {
+    @uint
+    index!: U32;
+    @array(NameMap)
+    names!: NameMap[];
 }
 
-let keys = [
-    "typeSection",
-    "importSection",
-    "functionSection",
-    "tableSection",
-    "memorySection",
-    "globalSection",
-    "exportSection",
-    "startSection",
-    "elementSection",
-    "codeSection",
-    "dataSection"
-];
-
-let props: any = {};
-for (let key of keys) {
-    let Key = key.replace(/^\w/, $$ => $$.toUpperCase()) as any;
-    let value = SectionType[Key] as any;
-    props[key] = {
-        get() {
-            return (this.sections as Section[]).find(it => it.type === value);
-        }
-    }
+/**
+ * 间接名称映射
+ */
+export class IndirectNameMap {
+    @array(IndirectNameAssociation)
+    associations!: IndirectNameAssociation[];
 }
-Object.defineProperties(InnerModule.prototype, props)
 
+/**
+ * 模块名子段
+ */
+export class ModuleNameSubSection extends NameSubSection {
+    readonly type = NameType.Module;
+    @str
+    name!: string;
+}
+/**
+ * 函数名子段
+ */
+export class FunctionNameSubSection extends NameSubSection {
+    readonly type = NameType.Function;
+    @obj(NameMap)
+    names!: NameMap;
+}
+/**
+ * 局部变量名子段
+ */
+export class LocalNameSubSection extends NameSubSection {
+    readonly type = NameType.Local;
+    @obj(IndirectNameMap)
+    names!: IndirectNameMap;
+}
+/**
+ * 标签名子段
+ */
+export class LabelNameSubSection extends NameSubSection {
+    readonly type = NameType.Label;
+
+}
+/**
+ * 类型名子段
+ */
+export class TypeNameSubSection extends NameSubSection {
+    readonly type = NameType.Type;
+}
+/**
+ * 表格名子段
+ */
+export class TableNameSubSection extends NameSubSection {
+    readonly type = NameType.Table;
+}
+/**
+ * 内存名子段
+ */
+export class MemoryNameSubSection extends NameSubSection {
+    readonly type = NameType.Memory;
+}
+/**
+ * 全局变量名子段
+ */
+export class GlobalNameSubSection extends NameSubSection {
+    readonly type = NameType.Global;
+}
+/**
+ * 元素名子段
+ */
+export class ElementNameSubSection extends NameSubSection {
+    readonly type = NameType.Element;
+}
+/**
+ * 数据名子段
+ */
+export class DataNameSubSection extends NameSubSection {
+    readonly type = NameType.Data;
+}

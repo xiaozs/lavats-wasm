@@ -1,6 +1,6 @@
 import { Env } from './Env';
 import { ImportExportType, isF32, isF64, isI32, isI64, isU32, LimitOption, ModuleOption, Type, U32 } from './Type';
-import { InnerModule } from "./Section";
+import { InnerModule } from "./InnerModule";
 
 /**
  * 获取模块默认配置的函数
@@ -247,6 +247,9 @@ export class Module {
         check && this.check();
         let inner = InnerModule.fromModule(this);
         return inner.toBuffer();
+    }
+    static fromBuffer(buffer: ArrayBuffer) {
+        return InnerModule.fromBuffer(buffer);
     }
 }
 

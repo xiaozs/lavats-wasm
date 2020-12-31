@@ -1,7 +1,7 @@
 import { readFile, readFileSync } from "fs";
 import { BlockType, Code, Func, ImportExportType, Module, Type } from "../src";
 
-import { InnerModule } from "../src/Section";
+import { InnerModule } from "../src/InnerModule";
 
 // let m = new Module({
 //     name: "module",
@@ -50,4 +50,7 @@ import { InnerModule } from "../src/Section";
 
 let buffer = readFileSync("./test/test.wasm");
 let test = InnerModule.fromBuffer(buffer);
+let [customSec] = test.getCustomSections("name");
+let nameSec = customSec?.toNameSection();
+let buf = nameSec.toBuffer();
 debugger;

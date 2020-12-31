@@ -1,6 +1,6 @@
 import { instructionSet } from './Instruction';
 import { Type } from './Type';
-import { encodeInt } from './utils';
+import { encodeInt, isExtends } from './utils';
 
 export interface Offset {
     value: number;
@@ -35,7 +35,8 @@ export function encodeF64(num: number): ArrayBuffer {
 }
 
 export function encodeArray<T>(arr: T[], writer: Writer<T>): ArrayBuffer {
-    let buffers: ArrayBuffer[] = [];
+    let size = encodeInt(arr.length);
+    let buffers: ArrayBuffer[] = [size];
     for (let it of arr) {
         let buf = writer(it);
         buffers.push(buf);
@@ -227,7 +228,7 @@ function getSize(arr: ArrayBuffer[], sizeIndex: number): ArrayBuffer {
 }
 
 export function encodeObject(obj: any): ArrayBuffer {
-    let decosOfType = decos.filter(it => it.target === obj.constructor);
+    let decosOfType = decos.filter(it => obj instanceof it.target);
     let res: ArrayBuffer[] = [];
     let ignoreKey: string | undefined;
     let sizeIndex: number | undefined;
@@ -254,7 +255,7 @@ export function encodeObject(obj: any): ArrayBuffer {
 }
 
 export function decodeObject(buffer: ArrayBuffer, offset: Offset, type: any) {
-    let decosOfType = decos.filter(it => it.target === type);
+    let decosOfType = decos.filter(it => isExtends(type, it.target));
     let obj = new type();
     let org: number | undefined;
     for (let { key, reader, isSize } of decosOfType) {
@@ -268,11 +269,11 @@ export function decodeObject(buffer: ArrayBuffer, offset: Offset, type: any) {
     return obj;
 }
 
-export const int = (target: any, key: string): void => {
+export const uint = (target: any, key: string): void => {
     decos.push({ target: target.constructor, key, writer: encodeInt, reader: decodeUint });
 }
 
-export const sInt = (target: any, key: string): void => {
+export const sint = (target: any, key: string): void => {
     decos.push({ target: target.constructor, key, writer: encodeInt, reader: decodeSint });
 }
 
@@ -306,6 +307,21 @@ export const array = (type: Function) => (target: any, key: string): void => {
         key,
         writer: arr => encodeArray(arr, it => encodeObject(it)),
         reader: (buf, offset) => decodeArray(buf, offset, (buf, offset) => decodeObject(buf, offset, type))
+    });
+}
+
+export const arrayMap = (map: Record<number | string, Function>) => (target: any, key: string): void => {
+    decos.push({
+        target: target.constructor,
+        key,
+        writer: arr => encodeArray(arr, it => encodeObject(it)),
+        reader: (buf, offset) => {
+            let org = offset.value;
+            let typeValue = decodeUint(buf, offset);
+            offset.value = org;
+            let type = map[typeValue];
+            return decodeArray(buf, offset, (buf, offset) => decodeObject(buf, offset, type));
+        }
     });
 }
 

@@ -617,7 +617,9 @@ export interface IfOption {
     else?: Instruction[];
 }
 
-
+/**
+ * 函数类型
+ */
 export enum FuncType {
     func = -0x20,
 }

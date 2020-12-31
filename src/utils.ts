@@ -1,3 +1,7 @@
+/**
+ * 计算编码数值的长度
+ * @param num 编码数值
+ */
 function getBtyeLength(num: number): number {
     let byteLength = 1;
     while (true) {
@@ -8,6 +12,10 @@ function getBtyeLength(num: number): number {
     }
 }
 
+/**
+ * 对数值进行leb128编码
+ * @param num 编码数值
+ */
 export function encodeInt(num: number): ArrayBuffer {
     let byteLength = getBtyeLength(num);
     let res = new Uint8Array(byteLength);
@@ -25,4 +33,17 @@ export function encodeInt(num: number): ArrayBuffer {
     }
 
     return res.buffer;
+}
+
+/**
+ * 判断两个类型之间的关系
+ * @param subClass 子类型
+ * @param baseClass 父类型
+ */
+export function isExtends(subClass: Function, baseClass: Function) {
+    let current = subClass;
+    do {
+        if (current === baseClass) return true;
+    } while (current = current.prototype.__proto__?.constructor);
+    return false;
 }
