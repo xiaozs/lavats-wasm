@@ -78,6 +78,26 @@ export class Func {
         return { name, params: res, results };
     }
 
+    getLocalTypes(): { count: number, type: Type }[] {
+        let res: { count: number, type: Type }[] = [];
+        let currentType: Type | undefined;
+        let currentCount = 0;
+        for (let local of this.options.locals ?? []) {
+            let type = typeof local === "object" ? local.type : local;
+            if (currentType !== type) {
+                currentType && res.push({
+                    count: currentCount,
+                    type: currentType,
+                })
+
+                currentType = type;
+                currentCount = 1;
+            }
+            currentCount++;
+        }
+        return res;
+    }
+
     /**
      * 获取局部变量类型
      * @param index 索引，或者是名称
@@ -104,5 +124,9 @@ export class Func {
         } else {
             return arr[index];
         }
+    }
+
+    toBuffer(): ArrayBuffer {
+        // todo
     }
 }

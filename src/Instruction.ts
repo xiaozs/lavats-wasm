@@ -210,6 +210,8 @@ export const instructions: readonly InstructionOption[] = encode([
             if (!top) throw new Error(`空栈`);
 
             if (global.globalType !== top) throw new Error(`类型不匹配`);
+
+            if (!global.mutable) throw new Error(`global ${globalIndex}: 无法修改`);
         }
     },
 

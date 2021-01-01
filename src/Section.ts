@@ -126,6 +126,12 @@ export class Global {
     valueType!: Type;
     @uint
     mutable!: boolean;
+}
+
+/**
+ * 全局变量
+ */
+export class InitedGlobal extends Global {
     @numberMap("valueType")
     init!: number;
 }
@@ -198,8 +204,8 @@ export class MemorySection extends Section {
  */
 export class GlobalSection extends Section {
     readonly type = SectionType.GlobalSection;
-    @array(Global)
-    globals!: Global[];
+    @array(InitedGlobal)
+    globals!: InitedGlobal[];
 }
 
 /**

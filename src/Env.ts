@@ -1,15 +1,15 @@
 import type { Func } from './Func';
-import { GlobalOption, ImportExportType, Index, MemoryOption, ModuleOption, TableOption, TypeOption } from './Type';
+import { GlobalOption, ImportExportType, Index, MemoryOption, ModuleOption, TableOption, Type, TypeOption, U32 } from './Type';
 
 /**
  * 环境上下文
  */
 export class Env {
-    private functions = this.get(ImportExportType.Function);
-    private tables = this.get(ImportExportType.Table);
-    private memories = this.get(ImportExportType.Memory);
-    private globals = this.get(ImportExportType.Global);
-    private types = this.getType();
+    readonly functions = this.get(ImportExportType.Function);
+    readonly tables = this.get(ImportExportType.Table);
+    readonly memories = this.get(ImportExportType.Memory);
+    readonly globals = this.get(ImportExportType.Global);
+    readonly types = this.getType();
 
     constructor(private option: ModuleOption) { }
     find(type: ImportExportType.Function, index: Index): TypeOption | undefined;
@@ -50,11 +50,38 @@ export class Env {
             return this.types[index];
         }
     }
+
+    findIndex(type: "functions" | "tables" | "memories" | "globals" | "types", index: Index): U32 | undefined {
+        if (typeof index === "string") {
+            return this[type].findIndex((it: any) => it.name === index);
+        } else {
+            return index;
+        }
+    }
+    findFunctionIndex(index: Index): U32 | undefined {
+        return this.findIndex("functions", index);
+    }
+    findGlobalIndex(index: Index): U32 | undefined {
+        return this.findIndex("globals", index);
+    }
+    findMemoryIndex(index: Index): U32 | undefined {
+        return this.findIndex("memories", index);
+    }
+    findTableIndex(index: Index): U32 | undefined {
+        return this.findIndex("tables", index);
+    }
+    findTypeIndex(index: Index): U32 | undefined {
+        return this.findIndex("types", index);
+    }
+
     private getType(): TypeOption[] {
         let types = this.option.type;
 
+        let typeOptions = this.option.import.filter(it => it.type === ImportExportType.Function) as TypeOption[];
+        let importFuncs = typeOptions.map(it => ({ params: it.params, results: it.results }));
+
         let funcTypes = this.functions.map(it => ({ ...it, name: undefined }));
-        for (let it of funcTypes) {
+        for (let it of [...funcTypes, ...importFuncs]) {
             let isInArr = types.some(t => this.isSameType(t, it));
             if (!isInArr) continue;
             types.push(it);
@@ -62,7 +89,7 @@ export class Env {
 
         return types;
     }
-    private isSameType(t1: TypeOption, t2: TypeOption) {
+    isSameType(t1: TypeOption, t2: TypeOption) {
         if (t1.params.length !== t2.params.length)
             return false;
         if (t1.results.length !== t2.params.length)
