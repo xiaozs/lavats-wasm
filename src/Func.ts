@@ -1,7 +1,8 @@
-import { BlockProxy } from './Instruction';
+import { BlockProxy, BlockInstruction } from './Instruction';
 import { Stack } from "./Stack";
 import { FunctionOption, Index, Type, TypeOption } from './Type';
 import { Env } from "./Env";
+import { combin } from './utils';
 
 /**
  * 函数
@@ -17,7 +18,7 @@ export class Func {
     /**
      * @param options 函数配置
      */
-    constructor(private options: FunctionOption) { }
+    constructor(readonly options: FunctionOption) { }
 
     /**
      * 检查函数中的局部名称是否冲突
@@ -126,7 +127,23 @@ export class Func {
         }
     }
 
+    getLables(): (string | undefined)[] {
+        let res: (string | undefined)[] = [];
+
+        let blockInstrs = (this.options.codes ?? []).filter(it => it instanceof BlockInstruction) as BlockInstruction[];
+        for (let it of blockInstrs) {
+            res.push(...it.getLables());
+        }
+
+        return res;
+    }
+
     toBuffer(): ArrayBuffer {
-        // todo
+        let res: ArrayBuffer[] = [];
+        for (let code of this.options.codes ?? []) {
+            let buf = code.toBuffer();
+            res.push(buf);
+        }
+        return combin(res);
     }
 }

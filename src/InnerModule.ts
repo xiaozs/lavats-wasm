@@ -1,8 +1,9 @@
-import { decodeUint, decodeObject, Offset, combin, encodeObject } from './encode';
+import { decodeUint, decodeObject, Offset, encodeObject } from './encode';
 import { Module } from './Module';
 import { ElementType, ImportExportType, NameType, SectionType } from './Type';
-import { CodeSection, CustomSection, DataNameSubSection, DataSection, ElementNameSubSection, ElementSection, Export, ExportSection, FunctionExportDesc, FunctionImportDesc, FunctionNameSubSection, FunctionSection, FunctionType, Global, GlobalExportDesc, GlobalImportDesc, GlobalNameSubSection, GlobalSection, Import, ImportDesc, ImportSection, InitedGlobal, LabelNameSubSection, LocalNameSubSection, Memory, MemoryExportDesc, MemoryImportDesc, MemoryNameSubSection, MemorySection, ModuleNameSubSection, NameSubSection, Section, StartSection, Table, TableExportDesc, TableImportDesc, TableNameSubSection, TableSection, TypeNameSubSection, TypeSection, Element, Code, Local, Data } from './Section';
+import { CodeSection, CustomSection, DataNameSubSection, DataSection, ElementNameSubSection, ElementSection, Export, ExportSection, FunctionExportDesc, FunctionImportDesc, FunctionNameSubSection, FunctionSection, FunctionType, Global, GlobalExportDesc, GlobalImportDesc, GlobalNameSubSection, GlobalSection, Import, ImportDesc, ImportSection, InitedGlobal, LabelNameSubSection, LocalNameSubSection, Memory, MemoryExportDesc, MemoryImportDesc, MemoryNameSubSection, MemorySection, ModuleNameSubSection, NameSubSection, Section, StartSection, Table, TableExportDesc, TableImportDesc, TableNameSubSection, TableSection, TypeNameSubSection, TypeSection, Element, Code, Local, Data, NameMap, IndirectNameAssociation, IndirectNameMap } from './Section';
 import { Env } from './Env';
+import { combin } from './utils';
 
 /**
  * 内用模块
@@ -31,18 +32,19 @@ export class InnerModule {
         return new InnerModule(sections);
     }
     private static getTypeSection(module: Module, env: Env): TypeSection | undefined {
+        if (!env.types.length) return;
         let functionTypes = env.types.map(it => {
             let type = new FunctionType();
             type.params = it.params;
             type.results = it.results;
             return type;
         })
-        if (!functionTypes.length) return;
         let res = new TypeSection();
         res.functionTypes = functionTypes;
         return res;
     }
     private static getImportSection(module: Module, env: Env): ImportSection | undefined {
+        if (!module.import.length) return;
         let imports = module.import.map((it) => {
             let imp = new Import();
             imp.module = it.module;
@@ -89,23 +91,23 @@ export class InnerModule {
                 }
             }
         });
-        if (!imports.length) return;
         let res = new ImportSection();
         res.imports = imports;
         return res;
     }
     private static getFunctionSection(module: Module, env: Env): FunctionSection | undefined {
+        if (!module.function.length) return;
         let typeIndex = module.function.map(it => {
             let type = it.getType();
             let typeIndex = env.types.findIndex(type1 => env.isSameType(type1, type));
             return typeIndex;
         });
-        if (!typeIndex.length) return;
         let res = new FunctionSection();
         res.typeIndex = typeIndex;
         return res;
     }
     private static getTableSection(module: Module, env: Env): TableSection | undefined {
+        if (!module.table.length) return;
         let tables = module.table.map(it => {
             let table = new Table();
             table.elementType = ElementType.funcref;
@@ -117,12 +119,12 @@ export class InnerModule {
             }
             return table;
         })
-        if (!tables.length) return;
         let res = new TableSection();
         res.tables = tables;
         return res;
     }
     private static getMemorySection(module: Module, env: Env): MemorySection | undefined {
+        if (!module.memory.length) return;
         let memories = module.memory.map(it => {
             let memory = new Memory();
             let hasMax = it.max === undefined;
@@ -133,12 +135,12 @@ export class InnerModule {
             }
             return memory;
         })
-        if (!memories.length) return;
         let res = new MemorySection();
         res.memories = memories;
         return res;
     }
     private static getGlobalSection(module: Module, env: Env): GlobalSection | undefined {
+        if (!module.global.length) return;
         let globals = module.global.map(it => {
             let global = new InitedGlobal();
             global.mutable = it.mutable ?? false;
@@ -146,12 +148,12 @@ export class InnerModule {
             global.init = it.init;
             return global;
         });
-        if (!globals.length) return;
         let res = new GlobalSection();
         res.globals = globals;
         return res;
     }
     private static getExportSection(module: Module, env: Env): ExportSection | undefined {
+        if (!module.export.length) return;
         let exports = module.export.map(it => {
             let exp = new Export();
             exp.name = it.exportName;
@@ -182,7 +184,6 @@ export class InnerModule {
                 }
             }
         });
-        if (!exports.length) return;
         let res = new ExportSection();
         res.exports = exports;
         return res;
@@ -194,6 +195,7 @@ export class InnerModule {
         return res;
     }
     private static getElementSection(module: Module, env: Env): ElementSection | undefined {
+        if (!module.element.length) return;
         let elements = module.element.map(it => {
             let elemet = new Element();
             elemet.tableIndex = env.findTableIndex(it.tableIndex)!;
@@ -201,12 +203,12 @@ export class InnerModule {
             elemet.functionIndexes = it.functionIndexes.map(idx => env.findFunctionIndex(idx)!);
             return elemet;
         })
-        if (!elements.length) return;
         let res = new ElementSection();
         res.elements = elements;
         return res;
     }
     private static getCodeSection(module: Module, env: Env): CodeSection | undefined {
+        if (!module.function.length) return;
         let codes = module.function.map(it => {
             let code = new Code();
             let locals = it.getLocalTypes().map(it => {
@@ -219,12 +221,12 @@ export class InnerModule {
             code.expr = it.toBuffer();
             return code;
         });
-        if (!codes.length) return;
         let res = new CodeSection();
         res.codes = codes;
         return res;
     }
     private static getDataSection(module: Module, env: Env): DataSection | undefined {
+        if (!module.data.length) return;
         let datas = module.data.map(it => {
             let data = new Data();
             data.memoryIndex = env.findMemoryIndex(it.memoryIndex)!;
@@ -232,14 +234,16 @@ export class InnerModule {
             data.init = it.init;
             return data;
         })
-        if (!datas.length) return;
         let res = new DataSection();
         res.datas = datas;
         return res;
     }
-    private static getCustomSection(module: Module, env: Env): DataSection | undefined {
-        let nameSection = new NameSection();
-
+    private static getCustomSection(module: Module, env: Env): CustomSection | undefined {
+        let nameSection = NameSection.fromModule(module);
+        let res = new CustomSection();
+        res.name = "name";
+        res.buffer = nameSection.toBuffer();
+        return res;
     }
 
     static fromModule(module: Module, env: Env): InnerModule {
@@ -366,20 +370,128 @@ export interface InnerModule {
     Object.defineProperties(InnerModule.prototype, props)
 }
 
-export interface NameOption {
-
-}
-
 /**
  * 名称段
  */
 export class NameSection {
     private constructor(private subSections: NameSubSection[]) { }
-    static fromOption(option: NameOption) {
-        let subSections: NameSubSection[] = [];
-        // todo
+    static fromModule(module: Module): NameSection {
+        let secs = [
+            this.getModuleNameSubSection(module),
+            this.getNameSubSection(module, "function"),
+            this.getLocalNameSubSection(module),
+            this.getLabelNameSubSection(module),
+            this.getNameSubSection(module, "type"),
+            this.getNameSubSection(module, "table"),
+            this.getNameSubSection(module, "memory"),
+            this.getNameSubSection(module, "global"),
+            this.getNameSubSection(module, "element"),
+            this.getNameSubSection(module, "data")
+        ];
+
+        let subSections = secs.filter(it => it) as NameSubSection[];
+
         return new NameSection(subSections);
     }
+
+    private static getModuleNameSubSection(module: Module): ModuleNameSubSection | undefined {
+        if (module.name) {
+            let sec = new ModuleNameSubSection();
+            sec.name = module.name;
+            return sec;
+        }
+    }
+
+    private static getLocalNameSubSection(module: Module): LocalNameSubSection | undefined {
+        let associations: IndirectNameAssociation[] = [];
+        for (let functionIndex = 0; functionIndex < module.function.length; functionIndex++) {
+            let func = module.function[functionIndex];
+            let params = func.options.params || [];
+            let locals = func.options.locals || [];
+            let vals = [...params, ...locals];
+
+            let names: NameMap[] = [];
+            for (let localIndex = 0; localIndex < vals.length; localIndex++) {
+                let local = vals[localIndex];
+                if (typeof local !== "object") continue;
+                let nameMap = new NameMap();
+                nameMap.index = localIndex;
+                nameMap.name = local.name;
+                names.push(nameMap);
+            }
+            if (names.length) {
+                let assoc = new IndirectNameAssociation();
+                assoc.index = functionIndex;
+                assoc.names = names;
+                associations.push(assoc);
+            }
+        }
+        if (associations.length) {
+            let sec = new LocalNameSubSection();
+            let names = new IndirectNameMap();
+            names.associations = associations;
+            sec.names = names;
+            return sec;
+        }
+    }
+
+    private static getLabelNameSubSection(module: Module): LabelNameSubSection | undefined {
+        let associations: IndirectNameAssociation[] = [];
+        for (let functionIndex = 0; functionIndex < module.function.length; functionIndex++) {
+            let func = module.function[functionIndex];
+            let labels = func.getLables();
+
+            let names: NameMap[] = [];
+            for (let labelIndex = 0; labelIndex < labels.length; labelIndex++) {
+                let label = labels[labelIndex];
+                if (label === undefined) continue;
+                let nameMap = new NameMap();
+                nameMap.index = labelIndex;
+                nameMap.name = label;
+                names.push(nameMap);
+            }
+            if (names.length) {
+                let assoc = new IndirectNameAssociation();
+                assoc.index = functionIndex;
+                assoc.names = names;
+                associations.push(assoc);
+            }
+        }
+        if (associations.length) {
+            let sec = new LabelNameSubSection();
+            let names = new IndirectNameMap();
+            names.associations = associations;
+            sec.names = names;
+            return sec;
+        }
+    }
+
+    private static getNameSubSection(module: Module, type: "function" | "type" | "table" | "memory" | "global" | "element" | "data"): NameSubSection | undefined {
+        let map = {
+            "function": FunctionNameSubSection,
+            "type": TypeNameSubSection,
+            "table": TableNameSubSection,
+            "memory": MemoryNameSubSection,
+            "global": GlobalNameSubSection,
+            "element": ElementNameSubSection,
+            "data": DataNameSubSection,
+        }
+        let names: NameMap[] = [];
+        for (let i = 0; i < module[type].length; i++) {
+            let it = module[type][i];
+            if (!it.name) continue;
+            let nameMap = new NameMap();
+            nameMap.index = i;
+            nameMap.name = it.name;
+            names.push(nameMap);
+        }
+        if (names.length) {
+            let sec = new map[type]();
+            sec.names = names;
+            return sec;
+        }
+    }
+
     static fromBuffer(buffer: ArrayBuffer): NameSection {
         let offset: Offset = { value: 0 };
 

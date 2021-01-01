@@ -534,7 +534,7 @@ export interface NormalInstructionOption {
     /**
      * 指令代码
      */
-    readonly code: readonly number[];
+    readonly code: ArrayBuffer;
     /**
      * 指令的立即数类型
      */
@@ -560,7 +560,7 @@ export interface SpecialInstructionOption {
     /**
      * 指令代码
      */
-    readonly code: readonly number[];
+    readonly code: ArrayBuffer;
     /**
      * 指令的立即数类型
      */

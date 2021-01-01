@@ -1,6 +1,6 @@
 import { instructionSet } from './Instruction';
 import { Type } from './Type';
-import { encodeInt, isExtends } from './utils';
+import { encodeInt, isExtends, combin } from './utils';
 
 export interface Offset {
     value: number;
@@ -44,25 +44,25 @@ export function encodeArray<T>(arr: T[], writer: Writer<T>): ArrayBuffer {
     return combin(buffers);
 }
 
-let end = new Uint8Array(instructionSet["end"].code);
+let end = instructionSet["end"].code;
 let encodeExprMap = {
     [Type.I32]: (val: number) => {
-        let code = new Uint8Array(instructionSet["i32.const"].code);
+        let code = instructionSet["i32.const"].code;
         let num = encodeInt(val);
         return combin([code, num, end])
     },
     [Type.I64]: (val: number) => {
-        let code = new Uint8Array(instructionSet["i64.const"].code);
+        let code = instructionSet["i64.const"].code;
         let num = encodeInt(val);
         return combin([code, num, end])
     },
     [Type.F32]: (val: number) => {
-        let code = new Uint8Array(instructionSet["f32.const"].code);
+        let code = instructionSet["f32.const"].code;
         let num = encodeF32(val);
         return combin([code, num, end])
     },
     [Type.F64]: (val: number) => {
-        let code = new Uint8Array(instructionSet["f64.const"].code);
+        let code = instructionSet["f64.const"].code;
         let num = encodeF64(val);
         return combin([code, num, end])
     },
@@ -155,27 +155,27 @@ export function decodeArray<T>(buffer: ArrayBuffer, offset: Offset, reader: Read
 
 let decodeExprMap = {
     [Type.I32]: (buffer: ArrayBuffer, offset: Offset) => {
-        offset.value += instructionSet["i32.const"].code.length;
+        offset.value += instructionSet["i32.const"].code.byteLength;
         let num = decodeUint(buffer, offset);
-        offset.value += instructionSet["end"].code.length;
+        offset.value += instructionSet["end"].code.byteLength;
         return num;
     },
     [Type.I64]: (buffer: ArrayBuffer, offset: Offset) => {
-        offset.value += instructionSet["i64.const"].code.length;
+        offset.value += instructionSet["i64.const"].code.byteLength;
         let num = decodeUint(buffer, offset);
-        offset.value += instructionSet["end"].code.length;
+        offset.value += instructionSet["end"].code.byteLength;
         return num;
     },
     [Type.F32]: (buffer: ArrayBuffer, offset: Offset) => {
-        offset.value += instructionSet["f32.const"].code.length;
+        offset.value += instructionSet["f32.const"].code.byteLength;
         let num = decodeF32(buffer, offset);
-        offset.value += instructionSet["end"].code.length;
+        offset.value += instructionSet["end"].code.byteLength;
         return num;
     },
     [Type.F64]: (buffer: ArrayBuffer, offset: Offset) => {
-        offset.value += instructionSet["f32.const"].code.length;
+        offset.value += instructionSet["f32.const"].code.byteLength;
         let num = decodeF64(buffer, offset);
-        offset.value += instructionSet["end"].code.length;
+        offset.value += instructionSet["end"].code.byteLength;
         return num;
     },
     [Type.V128]: (buffer: ArrayBuffer, offset: Offset) => { throw new Error() }
@@ -192,20 +192,6 @@ export function decodeBuffer(buffer: ArrayBuffer, offset: Offset, size: number) 
     offset.value += size;
     return buffer.slice(start, end);
 }
-
-export function combin(buffers: ArrayBuffer[]) {
-    let total = buffers.reduce((res, it) => res + it.byteLength, 0);
-    let res = new Uint8Array(total);
-    let i = 0;
-    for (let buf of buffers) {
-        let b = new Uint8Array(buf);
-        for (let val of b) {
-            res[i++] = val;
-        }
-    }
-    return res.buffer;
-}
-
 
 interface Deco {
     target: Function,

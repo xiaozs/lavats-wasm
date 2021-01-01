@@ -47,3 +47,16 @@ export function isExtends(subClass: Function, baseClass: Function) {
     } while (current = current.prototype.__proto__?.constructor);
     return false;
 }
+
+export function combin(buffers: ArrayBuffer[]) {
+    let total = buffers.reduce((res, it) => res + it.byteLength, 0);
+    let res = new Uint8Array(total);
+    let i = 0;
+    for (let buf of buffers) {
+        let b = new Uint8Array(buf);
+        for (let val of b) {
+            res[i++] = val;
+        }
+    }
+    return res.buffer;
+}

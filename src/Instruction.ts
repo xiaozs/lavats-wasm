@@ -1,14 +1,17 @@
 import type { Env } from "./Env";
 import type { Func } from "./Func";
 import { Stack } from './Stack';
-import { BlockType, Index, ImmediateType, Type, TypeOption, InstructionOption, CheckOption, BlockOption, IfOption } from './Type';
+import { BlockType, Index, ImmediateType, Type, TypeOption, InstructionOption, CheckOption, BlockOption, IfOption, NormalInstructionOption, SpecialInstructionOption } from './Type';
 import { encodeInt } from './utils';
+import { combin } from './utils';
+
+type InstrsOption = (Omit<NormalInstructionOption, "code"> | Omit<SpecialInstructionOption, "code">) & { code: number[] };
 
 /**
  * 用于处理指令的code字段，该字段如果有第二个数，将第二个数编码为LEB128
  * @param instrs 指令
  */
-function encode(instrs: InstructionOption[]): InstructionOption[] {
+function encode(instrs: InstrsOption[]): InstructionOption[] {
     let res: InstructionOption[] = [];
     for (let it of instrs) {
         let code = it.code;
@@ -18,9 +21,11 @@ function encode(instrs: InstructionOption[]): InstructionOption[] {
             code = [code[0], ...view];
         }
 
+        let buf = new Uint8Array(code).buffer;
+
         res.push({
             ...it,
-            code,
+            code: buf,
         });
     }
     return res;
@@ -420,7 +425,7 @@ export class Instruction {
      * @param immediates 指令的立即数
      */
     constructor(
-        private instrOption: InstructionOption,
+        protected instrOption: InstructionOption,
         protected immediates: readonly any[]
     ) { }
 
@@ -438,6 +443,9 @@ export class Instruction {
             opt.stack.checkStackTop(this.instrOption.params);
             opt.stack.push(...this.instrOption.results);
         }
+    }
+    toBuffer(): ArrayBuffer {
+        return this.instrOption.code;
     }
 }
 
@@ -490,6 +498,8 @@ export abstract class BlockInstruction extends Instruction {
      * 块的签名类型
      */
     abstract get type(): BlockType | Index;
+
+    abstract getLables(): (string | undefined)[];
 }
 
 /**
@@ -524,6 +534,26 @@ export class NormalBlockInstruction extends BlockInstruction {
         this.checkCode(opt, type, this.blockOption.codes || []);
 
         opt.stack.push(...type.results);
+    }
+    toBuffer(): ArrayBuffer {
+        return combin([
+            this.instrOption.code,
+            encodeInt(this.immediates[0]),
+            ...(this.blockOption.codes ?? []).map(it => it.toBuffer()),
+            instructionSet["end"].code
+        ]);
+    }
+    getLables(): (string | undefined)[] {
+        let res: (string | undefined)[] = [];
+
+        res.push(this.blockOption.label);
+
+        let blockInstrs = (this.blockOption.codes ?? []).filter(it => it instanceof BlockInstruction) as BlockInstruction[];
+        for (let it of blockInstrs) {
+            res.push(...it.getLables());
+        }
+
+        return res;
     }
 }
 
@@ -569,6 +599,42 @@ export class IfBlock extends BlockInstruction {
         this.checkCode(opt, type, this.ifOption.else || []);
 
         opt.stack.push(...type.results);
+    }
+    toBuffer(): ArrayBuffer {
+        if (this.ifOption.else) {
+            return combin([
+                this.instrOption.code,
+                encodeInt(this.immediates[0]),
+                ...(this.ifOption.then ?? []).map(it => it.toBuffer()),
+                instructionSet["else"].code,
+                ...(this.ifOption.else ?? []).map(it => it.toBuffer()),
+                instructionSet["end"].code
+            ]);
+        } else {
+            return combin([
+                this.instrOption.code,
+                encodeInt(this.immediates[0]),
+                ...(this.ifOption.then ?? []).map(it => it.toBuffer()),
+                instructionSet["end"].code
+            ]);
+        }
+    }
+    getLables(): (string | undefined)[] {
+        let res: (string | undefined)[] = [];
+
+        res.push(this.ifOption.label);
+
+        let thenBlockInstrs = (this.ifOption.then ?? []).filter(it => it instanceof BlockInstruction) as BlockInstruction[];
+        for (let it of thenBlockInstrs) {
+            res.push(...it.getLables());
+        }
+
+        let elseBlockInstrs = (this.ifOption.then ?? []).filter(it => it instanceof BlockInstruction) as BlockInstruction[];
+        for (let it of elseBlockInstrs) {
+            res.push(...it.getLables());
+        }
+
+        return res;
     }
 }
 

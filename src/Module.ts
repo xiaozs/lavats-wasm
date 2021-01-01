@@ -245,7 +245,8 @@ export class Module {
     }
     toBuffer(check = true) {
         check && this.check();
-        let inner = InnerModule.fromModule(this);
+        let env = new Env(this.option);
+        let inner = InnerModule.fromModule(this, env);
         return inner.toBuffer();
     }
     static fromBuffer(buffer: ArrayBuffer) {
