@@ -1,5 +1,5 @@
 import { readFile, readFileSync, writeFileSync } from "fs";
-import { BlockType, Code, Func, ImportExportType, Module, Type, ElementType } from "../src";
+import { BlockType, Code, Func, ImportExportType, Module, Type, ElementType, data } from "../src";
 
 import { InnerModule } from "../src/InnerModule";
 
@@ -9,7 +9,7 @@ let m = new Module({
     //     { "name": "memory", "min": 0 }
     // ],
     data: [
-        { "name": "data", "offset": 0, "memoryIndex": 0, "init": Buffer.alloc(10) }
+        { "name": "data", "offset": 0, "memoryIndex": 0, "init": data.i64(10).toBuffer() }
     ],
     table: [
         { "name": "table", "elementType": ElementType.funcref, "min": 0 }

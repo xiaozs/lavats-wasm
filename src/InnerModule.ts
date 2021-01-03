@@ -467,19 +467,29 @@ export class NameSection {
     }
 
     private static getNameSubSection(module: Module, type: "function" | "type" | "table" | "memory" | "global" | "element" | "data"): NameSubSection | undefined {
-        // todo, 要算上引入部分的名称
-        let map = {
-            "function": FunctionNameSubSection,
-            "type": TypeNameSubSection,
-            "table": TableNameSubSection,
-            "memory": MemoryNameSubSection,
-            "global": GlobalNameSubSection,
-            "element": ElementNameSubSection,
-            "data": DataNameSubSection,
+        let map: Record<string, [new () => NameSubSection & { names: NameMap[] }, ImportExportType?]> = {
+            "function": [FunctionNameSubSection, ImportExportType.Function],
+            "table": [TableNameSubSection, ImportExportType.Table],
+            "memory": [MemoryNameSubSection, ImportExportType.Memory],
+            "global": [GlobalNameSubSection, ImportExportType.Global],
+
+            "type": [TypeNameSubSection],
+            "element": [ElementNameSubSection],
+            "data": [DataNameSubSection],
         }
+
         let names: NameMap[] = [];
-        for (let i = 0; i < module[type].length; i++) {
-            let it = module[type][i];
+        let [fn, importType] = map[type];
+
+        let group: { name?: string }[] = [];
+        if (importType) {
+            let imports = module.import.filter(it => it.type === importType);
+            group = imports;
+        }
+        group.push(...module[type]);
+
+        for (let i = 0; i < group.length; i++) {
+            let it = group[i];
             if (!it.name) continue;
             let nameMap = new NameMap();
             nameMap.index = i;
@@ -487,7 +497,7 @@ export class NameSection {
             names.push(nameMap);
         }
         if (names.length) {
-            let sec = new map[type]();
+            let sec = new fn();
             sec.names = names;
             return sec;
         }

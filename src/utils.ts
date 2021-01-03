@@ -61,6 +61,7 @@ export function combin(buffers: ArrayBuffer[]) {
     let res = new Uint8Array(total);
     let i = 0;
     for (let buf of buffers) {
+        buf = ArrayBuffer.isView(buf) ? buf.buffer : buf;
         let b = new Uint8Array(buf);
         for (let val of b) {
             res[i++] = val;
