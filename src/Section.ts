@@ -1,4 +1,4 @@
-import { array, arrayInt, buf, expr, uint, notIgnore, numberMap, obj, objMap, size, str, sint, arraySint, decodeObject } from './encode';
+import { array, arrayInt, buf, expr, uint, notIgnore, exprMap, obj, objMap, size, str, sint, arraySint, decodeObject } from './encode';
 import { NameSection } from './InnerModule';
 import { ElementType, FuncType, ImportExportType, NameType, SectionType, Type, U32 } from './Type';
 
@@ -82,8 +82,8 @@ export class Table {
     hasMax!: boolean;
     @uint
     min!: U32;
-    @notIgnore("hasMax")
     @uint
+    @notIgnore("hasMax")
     max?: U32;
 }
 
@@ -104,8 +104,8 @@ export class Memory {
     hasMax!: boolean;
     @uint
     min!: U32;
-    @notIgnore("hasMax")
     @uint
+    @notIgnore("hasMax")
     max?: U32;
 }
 
@@ -132,7 +132,7 @@ export class Global {
  * 全局变量
  */
 export class InitedGlobal extends Global {
-    @numberMap("valueType")
+    @exprMap("valueType")
     init!: number;
 }
 
@@ -178,7 +178,7 @@ export class ImportSection extends Section {
 export class FunctionSection extends Section {
     readonly type = SectionType.FunctionSection;
     @arrayInt
-    typeIndex!: U32[];
+    typeIndexes!: U32[];
 }
 
 /**
@@ -186,7 +186,7 @@ export class FunctionSection extends Section {
  */
 export class TableSection extends Section {
     readonly type = SectionType.TableSection;
-    @obj(Table)
+    @array(Table)
     tables!: Table[];
 }
 

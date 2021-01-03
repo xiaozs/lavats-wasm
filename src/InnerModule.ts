@@ -97,13 +97,13 @@ export class InnerModule {
     }
     private static getFunctionSection(module: Module, env: Env): FunctionSection | undefined {
         if (!module.function.length) return;
-        let typeIndex = module.function.map(it => {
+        let typeIndexes = module.function.map(it => {
             let type = it.getType();
             let typeIndex = env.types.findIndex(type1 => env.isSameType(type1, type));
             return typeIndex;
         });
         let res = new FunctionSection();
-        res.typeIndex = typeIndex;
+        res.typeIndexes = typeIndexes;
         return res;
     }
     private static getTableSection(module: Module, env: Env): TableSection | undefined {
@@ -218,7 +218,7 @@ export class InnerModule {
                 return local;
             });
             code.locals = locals;
-            code.expr = it.toBuffer();
+            code.expr = it.toBuffer(env);
             return code;
         });
         let res = new CodeSection();
@@ -467,6 +467,7 @@ export class NameSection {
     }
 
     private static getNameSubSection(module: Module, type: "function" | "type" | "table" | "memory" | "global" | "element" | "data"): NameSubSection | undefined {
+        // todo, 要算上引入部分的名称
         let map = {
             "function": FunctionNameSubSection,
             "type": TypeNameSubSection,

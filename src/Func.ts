@@ -1,8 +1,13 @@
-import { BlockProxy, BlockInstruction } from './Instruction';
+import { BlockProxy, BlockInstruction, instructionSet } from './Instruction';
 import { Stack } from "./Stack";
-import { FunctionOption, Index, Type, TypeOption } from './Type';
+import { FunctionOption, Index, ToBufferOption, Type, TypeOption, U32 } from './Type';
 import { Env } from "./Env";
 import { combin } from './utils';
+
+export interface LocalGroup {
+    type: Type;
+    count: U32;
+}
 
 /**
  * 函数
@@ -79,24 +84,33 @@ export class Func {
         return { name, params: res, results };
     }
 
-    getLocalTypes(): { count: number, type: Type }[] {
-        let res: { count: number, type: Type }[] = [];
-        let currentType: Type | undefined;
-        let currentCount = 0;
+    getLocalTypes(): LocalGroup[] {
+        let res: LocalGroup[] = [];
+        let currentGroup: LocalGroup | undefined;
         for (let local of this.options.locals ?? []) {
             let type = typeof local === "object" ? local.type : local;
-            if (currentType !== type) {
-                currentType && res.push({
-                    count: currentCount,
-                    type: currentType,
-                })
-
-                currentType = type;
-                currentCount = 1;
+            if (currentGroup?.type !== type) {
+                currentGroup = {
+                    type,
+                    count: 1,
+                }
+                res.push(currentGroup);
+            } else {
+                currentGroup.count++;
             }
-            currentCount++;
         }
         return res;
+    }
+
+    findLocalIndex(localIndex: Index): number {
+        if (typeof localIndex === "string") {
+            let params = this.options.params || [];
+            let locals = this.options.locals || [];
+            let vals = [...params, ...locals];
+            return vals.findIndex(it => typeof it === "object" && it.name === localIndex);
+        } else {
+            return localIndex;
+        }
     }
 
     /**
@@ -138,12 +152,19 @@ export class Func {
         return res;
     }
 
-    toBuffer(): ArrayBuffer {
+    toBuffer(env: Env): ArrayBuffer {
+        let opt: ToBufferOption = {
+            env,
+            func: this,
+            block: new BlockProxy(this),
+        }
+
         let res: ArrayBuffer[] = [];
         for (let code of this.options.codes ?? []) {
-            let buf = code.toBuffer();
+            let buf = code.toBuffer(opt);
             res.push(buf);
         }
+        res.push(instructionSet["end"].code);
         return combin(res);
     }
 }

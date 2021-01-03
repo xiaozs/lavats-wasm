@@ -524,6 +524,24 @@ export interface CheckOption {
 }
 
 /**
+ * 序列化配置项
+ */
+export interface ToBufferOption {
+    /**
+     * 环境上下文对象
+     */
+    env: Env;
+    /**
+     * 当前指令对应函数
+     */
+    func: Func;
+    /**
+     * 块的代理
+     */
+    block: BlockProxy;
+}
+
+/**
  * 一般指令
  */
 export interface NormalInstructionOption {
@@ -539,6 +557,10 @@ export interface NormalInstructionOption {
      * 指令的立即数类型
      */
     readonly immediates: readonly ImmediateType[];
+    /**
+     * 指令的立即数转换成二进制的方法
+     */
+    readonly immediatesToBuffer?: (option: ToBufferOption & { immediates: readonly any[] }) => ArrayBuffer;
     /**
      * 指令的参数类型
      */
@@ -565,6 +587,10 @@ export interface SpecialInstructionOption {
      * 指令的立即数类型
      */
     readonly immediates: readonly ImmediateType[];
+    /**
+     * 指令的立即数转换成二进制的方法
+     */
+    readonly immediatesToBuffer?: (option: ToBufferOption & { immediates: readonly any[] }) => ArrayBuffer;
     /**
      * 指令的检查函数
      * @param option 检查配置项

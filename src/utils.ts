@@ -1,13 +1,21 @@
+import type { Writer } from "./encode";
+
 /**
  * 计算编码数值的长度
  * @param num 编码数值
  */
 function getBtyeLength(num: number): number {
+    if (num < 0) {
+        num = ~num + 1;
+    }
+
     let byteLength = 1;
     while (true) {
         let isEnd = num >> (7 * byteLength) === 0;
         if (isEnd) {
             return byteLength;
+        } else {
+            byteLength++;
         }
     }
 }
@@ -59,4 +67,22 @@ export function combin(buffers: ArrayBuffer[]) {
         }
     }
     return res.buffer;
+}
+
+export function encodeF32(num: number): ArrayBuffer {
+    return new Float32Array([num]).buffer;
+}
+
+export function encodeF64(num: number): ArrayBuffer {
+    return new Float64Array([num]).buffer;
+}
+
+export function encodeArray<T>(arr: T[], writer: Writer<T>): ArrayBuffer {
+    let size = encodeInt(arr.length);
+    let buffers: ArrayBuffer[] = [size];
+    for (let it of arr) {
+        let buf = writer(it);
+        buffers.push(buf);
+    }
+    return combin(buffers);
 }

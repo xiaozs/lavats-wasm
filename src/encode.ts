@@ -1,6 +1,6 @@
 import { instructionSet } from './Instruction';
 import { Type } from './Type';
-import { encodeInt, isExtends, combin } from './utils';
+import { encodeInt, isExtends, combin, encodeArray, encodeF32, encodeF64 } from './utils';
 
 export interface Offset {
     value: number;
@@ -24,24 +24,6 @@ export function encodeString(str: string): ArrayBuffer {
         length,
         content
     ])
-}
-
-export function encodeF32(num: number): ArrayBuffer {
-    return new Float32Array([num]).buffer;
-}
-
-export function encodeF64(num: number): ArrayBuffer {
-    return new Float64Array([num]).buffer;
-}
-
-export function encodeArray<T>(arr: T[], writer: Writer<T>): ArrayBuffer {
-    let size = encodeInt(arr.length);
-    let buffers: ArrayBuffer[] = [size];
-    for (let it of arr) {
-        let buf = writer(it);
-        buffers.push(buf);
-    }
-    return combin(buffers);
 }
 
 let end = instructionSet["end"].code;
@@ -220,8 +202,12 @@ export function encodeObject(obj: any): ArrayBuffer {
     let sizeIndex: number | undefined;
     for (let { key, writer, isSize, ignore } of decosOfType) {
         if (ignoreKey === key) continue;
-        let isIgnore = ignore?.(obj);
-        if (isIgnore) ignoreKey = key;
+
+        if (ignore) {
+            let isIgnore = ignore(obj);
+            if (isIgnore) ignoreKey = key;
+            continue;
+        }
 
         if (isSize) {
             sizeIndex = res.length;
@@ -244,7 +230,16 @@ export function decodeObject(buffer: ArrayBuffer, offset: Offset, type: any) {
     let decosOfType = decos.filter(it => isExtends(type, it.target));
     let obj = new type();
     let org: number | undefined;
-    for (let { key, reader, isSize } of decosOfType) {
+    let ignoreKey: string | undefined;
+    for (let { key, reader, isSize, ignore } of decosOfType) {
+        if (ignoreKey === key) continue;
+
+        if (ignore) {
+            let isIgnore = ignore(obj);
+            if (isIgnore) ignoreKey = key;
+            continue;
+        }
+
         let value = reader(buffer, offset, obj, org);
         obj[key] = value;
 
@@ -362,33 +357,17 @@ export const objMap = (map: Record<number | string, Function>) => (target: any, 
     });
 }
 
-let intWriterMap = {
-    [Type.I32]: encodeInt,
-    [Type.I64]: encodeInt,
-    [Type.F32]: encodeF32,
-    [Type.F64]: encodeF64,
-    [Type.V128]: () => { throw new Error },
-};
-let intReaderMap = {
-    [Type.I32]: decodeUint,
-    [Type.I64]: decodeUint,
-    [Type.F32]: decodeF32,
-    [Type.F64]: decodeF64,
-    [Type.V128]: () => { throw new Error },
-}
-export const numberMap = (mapKey: string) => (target: any, key: string): void => {
+export const exprMap = (mapKey: string) => (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
         key,
         writer: (val, obj) => {
             let type: Type = obj[mapKey];
-            let fn = intWriterMap[type];
-            return fn(val);
+            return encodeExpr(type, val);
         },
         reader: (buf, offset, obj) => {
             let type: Type = obj[mapKey];
-            let fn = intReaderMap[type];
-            return fn(buf, offset);
+            return decodeExpr(buf, offset, type);
         }
     });
 }

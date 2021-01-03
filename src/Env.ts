@@ -83,30 +83,26 @@ export class Env {
         let funcTypes = this.functions.map(it => ({ ...it, name: undefined }));
         for (let it of [...funcTypes, ...importFuncs]) {
             let isInArr = types.some(t => this.isSameType(t, it));
-            if (!isInArr) continue;
+            if (isInArr) continue;
             types.push(it);
         }
 
         return types;
     }
     isSameType(t1: TypeOption, t2: TypeOption) {
-        if (t1.params.length !== t2.params.length)
-            return false;
-        if (t1.results.length !== t2.params.length)
-            return false;
+        if (t1.params.length !== t2.params.length) return false;
+        if (t1.results.length !== t2.results.length) return false;
 
         for (let i = 0; i < t1.params.length; i++) {
             let p1 = t1.params[i];
             let p2 = t2.params[i];
-            if (p1 !== p2)
-                return false;
+            if (p1 !== p2) return false;
         }
 
         for (let i = 0; i < t1.results.length; i++) {
             let r1 = t1.results[i];
             let r2 = t2.results[i];
-            if (r1 !== r2)
-                return false;
+            if (r1 !== r2) return false;
         }
 
         return true;

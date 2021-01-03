@@ -1,8 +1,8 @@
 import type { Env } from "./Env";
 import type { Func } from "./Func";
 import { Stack } from './Stack';
-import { BlockType, Index, ImmediateType, Type, TypeOption, InstructionOption, CheckOption, BlockOption, IfOption, NormalInstructionOption, SpecialInstructionOption } from './Type';
-import { encodeInt } from './utils';
+import { BlockType, Index, ImmediateType, Type, TypeOption, InstructionOption, CheckOption, BlockOption, IfOption, NormalInstructionOption, SpecialInstructionOption, ToBufferOption } from './Type';
+import { encodeArray, encodeF32, encodeF64, encodeInt } from './utils';
 import { combin } from './utils';
 
 type InstrsOption = (Omit<NormalInstructionOption, "code"> | Omit<SpecialInstructionOption, "code">) & { code: number[] };
@@ -31,6 +31,34 @@ function encode(instrs: InstrsOption[]): InstructionOption[] {
     return res;
 }
 
+type IndexType = "functions" | "tables" | "memories" | "globals" | "types" | "labels" | "locals";
+
+function indexToBuffer(type: IndexType, opt: ToBufferOption, index: Index): ArrayBuffer {
+    if (type === "labels") {
+        let num = opt.block.findLabelIndex(index);
+        return encodeInt(num);
+    } else if (type === "locals") {
+        let num = opt.func.findLocalIndex(index);
+        return encodeInt(num);
+    } else {
+        let num = opt.env.findIndex(type, index)!;
+        return encodeInt(num);
+    }
+}
+
+function to(...types: IndexType[]) {
+    return function (opt: ToBufferOption & { immediates: readonly any[] }) {
+        let buffers: ArrayBuffer[] = [];
+        for (let i = 0; i < types.length; i++) {
+            let type = types[i];
+            let imm = opt.immediates[i];
+            let buf = indexToBuffer(type, opt, imm);
+            buffers.push(buf);
+        }
+        return combin(buffers);
+    }
+}
+
 /**
  * 所有指令
  */
@@ -45,6 +73,7 @@ export const instructions: readonly InstructionOption[] = encode([
     {
         name: "br",
         code: [0x0C], immediates: [ImmediateType.Index],
+        immediatesToBuffer: to("labels"),
         check({ env, stack, immediates, block }) {
             let labelIndex = immediates[0];
             let isValidate = block.validateLabel(labelIndex);
@@ -57,6 +86,7 @@ export const instructions: readonly InstructionOption[] = encode([
     {
         name: "br_if",
         code: [0x0D], immediates: [ImmediateType.Index],
+        immediatesToBuffer: to("labels"),
         check({ env, stack, immediates, block }) {
             let labelIndex = immediates[0];
             let isValidate = block.validateLabel(labelIndex);
@@ -73,6 +103,12 @@ export const instructions: readonly InstructionOption[] = encode([
     {
         name: "br_table",
         code: [0x0E], immediates: [ImmediateType.IndexArray, ImmediateType.Index],
+        immediatesToBuffer({ immediates, block }) {
+            let idxArr = (immediates[0] as Index[]).map(it => block.findLabelIndex(it));
+            let idxArrBuffer = encodeArray(idxArr, encodeInt);
+            let defaultIndexBuffer = encodeInt(immediates[1]);
+            return combin([idxArrBuffer, defaultIndexBuffer]);
+        },
         check({ env, stack, immediates, block }) {
             let labelIndexes: Index[] = immediates[0];
             let defaultIndex: Index = immediates[1];
@@ -99,6 +135,7 @@ export const instructions: readonly InstructionOption[] = encode([
     {
         name: "call",
         code: [0x10], immediates: [ImmediateType.Index],
+        immediatesToBuffer: to("functions"),
         check({ env, stack, immediates }) {
             let functionIndex = immediates[0];
             let func = env.findFunction(functionIndex);
@@ -110,6 +147,7 @@ export const instructions: readonly InstructionOption[] = encode([
     },
     {
         name: "call_indirect",
+        immediatesToBuffer: to("types", "tables"),
         code: [0x11], immediates: [ImmediateType.Index, ImmediateType.Index],
         check({ env, stack, immediates }) {
             let typeIndex = immediates[0];
@@ -156,6 +194,7 @@ export const instructions: readonly InstructionOption[] = encode([
     {
         name: "local.get",
         code: [0x20], immediates: [ImmediateType.Index],
+        immediatesToBuffer: to("locals"),
         check({ stack, immediates, func }) {
             let localIndex = immediates[0];
             let localType = func.getLocalType(localIndex);
@@ -167,6 +206,7 @@ export const instructions: readonly InstructionOption[] = encode([
     {
         name: "local.set",
         code: [0x21], immediates: [ImmediateType.Index],
+        immediatesToBuffer: to("locals"),
         check({ stack, immediates, func }) {
             let localIndex = immediates[0];
             let localType = func.getLocalType(localIndex);
@@ -181,6 +221,7 @@ export const instructions: readonly InstructionOption[] = encode([
     {
         name: "local.tee",
         code: [0x22], immediates: [ImmediateType.Index],
+        immediatesToBuffer: to("locals"),
         check({ stack, immediates, func }) {
             let localIndex = immediates[0];
             let localType = func.getLocalType(localIndex);
@@ -195,6 +236,7 @@ export const instructions: readonly InstructionOption[] = encode([
     {
         name: "global.get",
         code: [0x23], immediates: [ImmediateType.Index],
+        immediatesToBuffer: to("globals"),
         check({ env, stack, immediates }) {
             let globalIndex = immediates[0];
             let global = env.findGlobal(globalIndex);
@@ -206,6 +248,7 @@ export const instructions: readonly InstructionOption[] = encode([
     {
         name: "global.set",
         code: [0x24], immediates: [ImmediateType.Index],
+        immediatesToBuffer: to("globals"),
         check({ env, stack, immediates }) {
             let globalIndex = immediates[0];
             let global = env.findGlobal(immediates[0]);
@@ -246,8 +289,8 @@ export const instructions: readonly InstructionOption[] = encode([
     { name: "i64.store16", code: [0x3D], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I64], results: [] },
     { name: "i64.store32", code: [0x3E], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I64], results: [] },
 
-    { name: "memory.size", code: [0x3F], immediates: [ImmediateType.Index], params: [], results: [Type.I32] },
-    { name: "memory.grow", code: [0x40], immediates: [ImmediateType.Index], params: [Type.I32], results: [Type.I32] },
+    { name: "memory.size", code: [0x3F], immediates: [ImmediateType.Index], immediatesToBuffer: to("memories"), params: [], results: [Type.I32] },
+    { name: "memory.grow", code: [0x40], immediates: [ImmediateType.Index], immediatesToBuffer: to("memories"), params: [Type.I32], results: [Type.I32] },
 
     { name: "i32.const", code: [0x41], immediates: [ImmediateType.I32], params: [], results: [Type.I32] },
     { name: "i64.const", code: [0x42], immediates: [ImmediateType.I64], params: [], results: [Type.I64] },
@@ -444,8 +487,34 @@ export class Instruction {
             opt.stack.push(...this.instrOption.results);
         }
     }
-    toBuffer(): ArrayBuffer {
-        return this.instrOption.code;
+    toBuffer(opt: ToBufferOption): ArrayBuffer {
+        let { immediatesToBuffer } = this.instrOption;
+        if (immediatesToBuffer) {
+            return immediatesToBuffer({
+                ...opt,
+                immediates: this.immediates,
+            });
+        }
+
+        let map: any = {
+            [ImmediateType.I32]: encodeInt,
+            [ImmediateType.I64]: encodeInt,
+            [ImmediateType.F32]: encodeF32,
+            [ImmediateType.F64]: encodeF64,
+            [ImmediateType.V128]: () => { throw new Error("todo") },
+        }
+
+        let buffers = [this.instrOption.code];
+        let immTypes = this.instrOption.immediates;
+        for (let i = 0; i < immTypes.length; i++) {
+            let type = immTypes[i];
+            let imm = this.immediates[i];
+            let fn = map[type];
+            if (!fn) throw new Error(`${this.name}: 立即数转换二进制出错`);
+            let res = fn(imm);
+            buffers.push(res);
+        }
+        return combin(buffers);
     }
 }
 
@@ -535,11 +604,16 @@ export class NormalBlockInstruction extends BlockInstruction {
 
         opt.stack.push(...type.results);
     }
-    toBuffer(): ArrayBuffer {
+    toBuffer(opt: ToBufferOption): ArrayBuffer {
+        opt = {
+            ...opt,
+            block: opt.block.createSubBlock(this)
+        };
+
         return combin([
             this.instrOption.code,
             encodeInt(this.immediates[0]),
-            ...(this.blockOption.codes ?? []).map(it => it.toBuffer()),
+            ...(this.blockOption.codes ?? []).map(it => it.toBuffer(opt)),
             instructionSet["end"].code
         ]);
     }
@@ -600,21 +674,26 @@ export class IfBlock extends BlockInstruction {
 
         opt.stack.push(...type.results);
     }
-    toBuffer(): ArrayBuffer {
+    toBuffer(opt: ToBufferOption): ArrayBuffer {
+        opt = {
+            ...opt,
+            block: opt.block.createSubBlock(this)
+        };
+
         if (this.ifOption.else) {
             return combin([
                 this.instrOption.code,
                 encodeInt(this.immediates[0]),
-                ...(this.ifOption.then ?? []).map(it => it.toBuffer()),
+                ...(this.ifOption.then ?? []).map(it => it.toBuffer(opt)),
                 instructionSet["else"].code,
-                ...(this.ifOption.else ?? []).map(it => it.toBuffer()),
+                ...(this.ifOption.else ?? []).map(it => it.toBuffer(opt)),
                 instructionSet["end"].code
             ]);
         } else {
             return combin([
                 this.instrOption.code,
                 encodeInt(this.immediates[0]),
-                ...(this.ifOption.then ?? []).map(it => it.toBuffer()),
+                ...(this.ifOption.then ?? []).map(it => it.toBuffer(opt)),
                 instructionSet["end"].code
             ]);
         }
@@ -683,6 +762,25 @@ export class BlockProxy {
             return this.validateName(labelIndex);
         } else {
             return this.validateIndex(labelIndex);
+        }
+    }
+
+    /**
+     * 返回label对应的索引
+     * @param labelIndex label的索引或者是名称
+     */
+    findLabelIndex(labelIndex: Index): number {
+        if (typeof labelIndex === "string") {
+            return this.findLabelIndexByName(labelIndex)!;
+        } else {
+            return labelIndex;
+        }
+    }
+
+    private findLabelIndexByName(name: string, currentIndex = 0): number | undefined {
+        if (this.instr instanceof BlockInstruction && this.instr.label === name) return currentIndex;
+        if (this.parent) {
+            return this.parent.findLabelIndexByName(name, currentIndex + 1);
         }
     }
 
