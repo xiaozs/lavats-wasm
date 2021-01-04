@@ -1,9 +1,8 @@
 import type { Env } from "./Env";
 import type { Func } from "./Func";
 import { Stack } from './Stack';
-import { BlockType, Index, ImmediateType, Type, TypeOption, InstructionOption, CheckOption, BlockOption, IfOption, NormalInstructionOption, SpecialInstructionOption, ToBufferOption } from './Type';
-import { encodeArray, encodeF32, encodeF64, encodeInt } from './utils';
-import { combin } from './utils';
+import { BlockOption, BlockType, CheckOption, IfOption, ImmediateType, Index, InstructionOption, NormalInstructionOption, SpecialInstructionOption, ToBufferOption, Type, TypeOption } from './Type';
+import { combin, encodeArray, encodeF32, encodeF64, encodeInt } from './utils';
 
 type InstrsOption = (Omit<NormalInstructionOption, "code"> | Omit<SpecialInstructionOption, "code">) & { code: number[] };
 
@@ -242,7 +241,7 @@ export const instructions: readonly InstructionOption[] = encode([
             let global = env.findGlobal(globalIndex);
             if (!global) throw new Error(`无法找到global ${globalIndex}`);
 
-            stack.push(global.globalType);
+            stack.push(global.valueType);
         }
     },
     {
@@ -257,7 +256,7 @@ export const instructions: readonly InstructionOption[] = encode([
             let top = stack.pop();
             if (!top) throw new Error(`空栈`);
 
-            if (global.globalType !== top) throw new Error(`类型不匹配`);
+            if (global.valueType !== top) throw new Error(`类型不匹配`);
 
             if (!global.mutable) throw new Error(`global ${globalIndex}: 无法修改`);
         }
@@ -468,8 +467,8 @@ export class Instruction {
      * @param immediates 指令的立即数
      */
     constructor(
-        protected instrOption: InstructionOption,
-        protected immediates: readonly any[]
+        readonly instrOption: InstructionOption,
+        readonly immediates: readonly any[]
     ) { }
 
     /**

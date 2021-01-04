@@ -48,7 +48,7 @@ let encodeExprMap = {
         let num = encodeF64(val);
         return combin([code, num, end])
     },
-    [Type.V128]: (val: number) => { throw new Error() }
+    [Type.V128]: (val: number) => { throw new Error("todo") }
 };
 
 export function encodeExpr(type: Type, val: number): ArrayBuffer {
@@ -160,7 +160,7 @@ let decodeExprMap = {
         offset.value += instructionSet["end"].code.byteLength;
         return num;
     },
-    [Type.V128]: (buffer: ArrayBuffer, offset: Offset) => { throw new Error() }
+    [Type.V128]: (buffer: ArrayBuffer, offset: Offset) => { throw new Error("todo") }
 };
 
 export function decodeExpr(buffer: ArrayBuffer, offset: Offset, type: Type): number {

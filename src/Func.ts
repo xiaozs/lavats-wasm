@@ -19,6 +19,9 @@ export class Func {
     get name() {
         return this.options.name;
     }
+    set name(val) {
+        this.options.name = val;
+    }
 
     /**
      * @param options 函数配置

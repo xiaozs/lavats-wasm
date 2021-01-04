@@ -159,10 +159,10 @@ export class Module {
         }
         for (let i = 0; i < this.option.global.length; i++) {
             let it = this.option.global[i];
-            let fn = fnMap[it.globalType];
+            let fn = fnMap[it.valueType];
             let isValidate = fn(it.init);
             if (!isValidate) {
-                let type = Type[it.globalType];
+                let type = Type[it.valueType];
                 throw new Error(`global ${i}: 类型为${type}, 其值为${it.init}`);
             }
         }

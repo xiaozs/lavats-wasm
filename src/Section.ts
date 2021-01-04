@@ -326,6 +326,16 @@ export class Code {
     locals!: Local[];
     @buf(false)
     expr!: ArrayBuffer;
+
+    getLocalTypes() {
+        let res: Type[] = [];
+        for (let { count, type } of this.locals) {
+            for (let i = 0; i < count; i++) {
+                res.push(type);
+            }
+        }
+        return res;
+    }
 }
 
 /**
@@ -404,75 +414,68 @@ export class ModuleNameSubSection extends NameSubSection {
     @str
     name!: string;
 }
+
+export abstract class NameMapSubSection extends NameSubSection {
+    @array(NameMap)
+    names!: NameMap[];
+}
+
+export abstract class IndirectNameMapSubSection extends NameSubSection {
+    @obj(IndirectNameMap)
+    names!: IndirectNameMap;
+}
+
 /**
  * 函数名子段
  */
-export class FunctionNameSubSection extends NameSubSection {
+export class FunctionNameSubSection extends NameMapSubSection {
     readonly type = NameType.Function;
-    @array(NameMap)
-    names!: NameMap[];
 }
 /**
  * 局部变量名子段
  */
-export class LocalNameSubSection extends NameSubSection {
+export class LocalNameSubSection extends IndirectNameMapSubSection {
     readonly type = NameType.Local;
-    @obj(IndirectNameMap)
-    names!: IndirectNameMap;
 }
 /**
  * 标签名子段
  */
-export class LabelNameSubSection extends NameSubSection {
+export class LabelNameSubSection extends IndirectNameMapSubSection {
     readonly type = NameType.Label;
-    @obj(IndirectNameMap)
-    names!: IndirectNameMap;
 }
 /**
  * 类型名子段
  */
-export class TypeNameSubSection extends NameSubSection {
+export class TypeNameSubSection extends NameMapSubSection {
     readonly type = NameType.Type;
-    @array(NameMap)
-    names!: NameMap[];
 }
 /**
  * 表格名子段
  */
-export class TableNameSubSection extends NameSubSection {
+export class TableNameSubSection extends NameMapSubSection {
     readonly type = NameType.Table;
-    @array(NameMap)
-    names!: NameMap[];
 }
 /**
  * 内存名子段
  */
-export class MemoryNameSubSection extends NameSubSection {
+export class MemoryNameSubSection extends NameMapSubSection {
     readonly type = NameType.Memory;
-    @array(NameMap)
-    names!: NameMap[];
 }
 /**
  * 全局变量名子段
  */
-export class GlobalNameSubSection extends NameSubSection {
+export class GlobalNameSubSection extends NameMapSubSection {
     readonly type = NameType.Global;
-    @array(NameMap)
-    names!: NameMap[];
 }
 /**
  * 元素名子段
  */
-export class ElementNameSubSection extends NameSubSection {
+export class ElementNameSubSection extends NameMapSubSection {
     readonly type = NameType.Element;
-    @array(NameMap)
-    names!: NameMap[];
 }
 /**
  * 数据名子段
  */
-export class DataNameSubSection extends NameSubSection {
+export class DataNameSubSection extends NameMapSubSection {
     readonly type = NameType.Data;
-    @array(NameMap)
-    names!: NameMap[];
 }

@@ -378,7 +378,13 @@ export type ImportOption =
         }
         | {
             type: ImportExportType.Global,
-            globalType: Type,
+            /**
+             * 全局变量类型
+             */
+            valueType: Type,
+            /**
+             * 是否可修改
+             */
             mutable?: boolean
         }
     );
@@ -432,7 +438,7 @@ export type GlobalOption =
         /**
          * 全局变量的类型
          */
-        globalType: Type.I32,
+        valueType: Type.I32,
         /**
          * 全局变量是否可变
          */
@@ -442,9 +448,9 @@ export type GlobalOption =
          */
         init: I32
     }
-    | { name?: string, globalType: Type.I64, mutable?: boolean, init: I64 }
-    | { name?: string, globalType: Type.F32, mutable?: boolean, init: F32 }
-    | { name?: string, globalType: Type.F64, mutable?: boolean, init: F64 }
+    | { name?: string, valueType: Type.I64, mutable?: boolean, init: I64 }
+    | { name?: string, valueType: Type.F32, mutable?: boolean, init: F32 }
+    | { name?: string, valueType: Type.F64, mutable?: boolean, init: F64 }
 
 
 /**

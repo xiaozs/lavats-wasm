@@ -27,7 +27,7 @@ let m = new Module({
         { name: "ifBlock", params: [Type.I32], results: [] }
     ],
     global: [
-        { "name": "global", "globalType": Type.I32, "init": 0 }
+        { "name": "global", "valueType": Type.I32, "init": 0 }
     ],
     start: "func",
     function: [
