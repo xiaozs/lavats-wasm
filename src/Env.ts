@@ -1,6 +1,8 @@
 import type { Func } from './Func';
-import { GlobalOption, ImportExportType, Index, MemoryOption, ModuleOption, TableOption, Type, TypeOption, U32 } from './Type';
+import { GlobalOption, ImportExportType, Index, IndexType, MemoryOption, ModuleOption, TableOption, Type, TypeOption, U32 } from './Type';
 
+
+type EnvKey = "functions" | "tables" | "memories" | "globals" | "types";
 /**
  * 环境上下文
  */
@@ -51,27 +53,35 @@ export class Env {
         }
     }
 
-    findIndex(type: "functions" | "tables" | "memories" | "globals" | "types", index: Index): U32 | undefined {
+    findIndex(type: IndexType.Function | IndexType.Table | IndexType.Memory | IndexType.Global | IndexType.Type, index: Index): U32 | undefined {
         if (typeof index === "string") {
-            return this[type].findIndex((it: any) => it.name === index);
+            let map = {
+                [IndexType.Function]: "functions",
+                [IndexType.Table]: "tables",
+                [IndexType.Memory]: "memories",
+                [IndexType.Global]: "globals",
+                [IndexType.Type]: "types",
+            }
+            let key = map[type] as EnvKey;
+            return this[key].findIndex((it: any) => it.name === index);
         } else {
             return index;
         }
     }
     findFunctionIndex(index: Index): U32 | undefined {
-        return this.findIndex("functions", index);
+        return this.findIndex(IndexType.Function, index);
     }
     findGlobalIndex(index: Index): U32 | undefined {
-        return this.findIndex("globals", index);
+        return this.findIndex(IndexType.Global, index);
     }
     findMemoryIndex(index: Index): U32 | undefined {
-        return this.findIndex("memories", index);
+        return this.findIndex(IndexType.Memory, index);
     }
     findTableIndex(index: Index): U32 | undefined {
-        return this.findIndex("tables", index);
+        return this.findIndex(IndexType.Table, index);
     }
     findTypeIndex(index: Index): U32 | undefined {
-        return this.findIndex("types", index);
+        return this.findIndex(IndexType.Type, index);
     }
 
     private getType(): TypeOption[] {
@@ -90,18 +100,21 @@ export class Env {
         return types;
     }
     isSameType(t1: TypeOption, t2: TypeOption) {
-        if (t1.params.length !== t2.params.length) return false;
-        if (t1.results.length !== t2.results.length) return false;
+        let { params: t1Ps = [], results: t1Rs = [] } = t1;
+        let { params: t2Ps = [], results: t2Rs = [] } = t2;
 
-        for (let i = 0; i < t1.params.length; i++) {
-            let p1 = t1.params[i];
-            let p2 = t2.params[i];
+        if (t1Ps.length !== t2Ps.length) return false;
+        if (t1Rs.length !== t2Rs.length) return false;
+
+        for (let i = 0; i < t1Ps?.length ?? 0; i++) {
+            let p1 = t1Ps[i];
+            let p2 = t2Ps[i];
             if (p1 !== p2) return false;
         }
 
-        for (let i = 0; i < t1.results.length; i++) {
-            let r1 = t1.results[i];
-            let r2 = t2.results[i];
+        for (let i = 0; i < t1Rs.length; i++) {
+            let r1 = t1Rs[i];
+            let r2 = t2Rs[i];
             if (r1 !== r2) return false;
         }
 
@@ -126,5 +139,38 @@ export class Env {
         } else {
             return [...imports, ...inners];
         }
+    }
+
+    indexToName(indexType: IndexType.Function | IndexType.Table | IndexType.Memory | IndexType.Global | IndexType.Type, idx: Index): Index {
+        if (typeof idx === "string") {
+            return idx;
+        } else {
+            let map = {
+                [IndexType.Function]: "functions",
+                [IndexType.Table]: "tables",
+                [IndexType.Memory]: "memories",
+                [IndexType.Global]: "globals",
+                [IndexType.Type]: "types",
+            }
+            let key = map[indexType] as EnvKey;
+            let res = this[key][idx];
+            return res.name ?? idx;
+        }
+    }
+
+    functionIndexToName(idx: Index): Index {
+        return this.indexToName(IndexType.Function, idx);
+    }
+    tableIndexToName(idx: Index): Index {
+        return this.indexToName(IndexType.Table, idx);
+    }
+    memoryIndexToName(idx: Index): Index {
+        return this.indexToName(IndexType.Memory, idx);
+    }
+    globalIndexToName(idx: Index): Index {
+        return this.indexToName(IndexType.Global, idx);
+    }
+    typeIndexToName(idx: Index): Index {
+        return this.indexToName(IndexType.Type, idx);
     }
 }

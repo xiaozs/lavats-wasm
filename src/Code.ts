@@ -313,9 +313,9 @@ for (let text in instructionSet) {
     let name = getName(names.pop()!);
     let namespace = getNamespace(names);
 
-    if (instr.immediates.length) {
+    if (instr.immediateTypes.length) {
         namespace[name] = function (...args: any[]) {
-            checkArgs(args, instr.immediates);
+            checkArgs(args, instr.immediateTypes);
             return new Instruction(instr, args);
         }
     } else {

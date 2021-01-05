@@ -1,8 +1,9 @@
 import { BlockProxy, BlockInstruction, instructionSet } from './Instruction';
 import { Stack } from "./Stack";
-import { FunctionOption, Index, ToBufferOption, Type, TypeOption, U32 } from './Type';
+import { FormatOption, FunctionOption, Index, ToBufferOption, Type, TypeOption, U32 } from './Type';
 import { Env } from "./Env";
 import { combin } from './encode';
+import { typesToString, addIndent } from './utils';
 
 export interface LocalGroup {
     type: Type;
@@ -67,7 +68,7 @@ export class Func {
                 block
             });
         }
-        if (stack.length !== type.results.length) throw new Error("出参不匹配");
+        if (stack.length !== type.results?.length) throw new Error("出参不匹配");
         stack.checkStackTop(type.results, false);
     }
 
@@ -169,5 +170,90 @@ export class Func {
         }
         res.push(instructionSet["end"].code);
         return combin(res);
+    }
+
+    toString(option: Required<FormatOption>): string {
+        let codes = this.codesToString(option);
+        let header = [
+            this.name ? `(func $${this.name}` : `(func`,
+            this.paramsToString(),
+            this.resultsToString(),
+            this.localsToString()
+        ].join(" ");
+
+        let content: string[] = [
+            header,
+            addIndent(codes, " ", option.indent),
+            ")"
+        ];
+        return content.join("\n");
+    }
+    private paramsToString() {
+        let { params } = this.options;
+        let res: string[] = [];
+        for (let it of params ?? []) {
+            if (typeof it === "object") {
+                let type = typesToString([it.type]);
+                res.push(`(param $${it.name} ${type})`);
+            } else {
+                let type = typesToString([it]);
+                res.push(`(param ${type})`)
+            }
+        }
+        return res.join(" ");
+    }
+    private resultsToString() {
+        let { results } = this.options;
+        let types = typesToString(results ?? []);
+        return results?.length ? `(result ${types})` : "";
+    }
+    private localsToString() {
+        let { locals } = this.options;
+        let res: string[] = [];
+        for (let it of locals ?? []) {
+            if (typeof it === "object") {
+                let type = typesToString([it.type]);
+                res.push(`(local $${it.name} ${type})`);
+            } else {
+                let type = typesToString([it]);
+                res.push(`(local ${type})`)
+            }
+        }
+        return res.join(" ");
+    }
+    private codesToString(option: Required<FormatOption>): string {
+        let { codes } = this.options;
+        let res: string[] = [];
+        for (let it of codes ?? []) {
+            res.push(it.toString(option))
+        }
+        return res.join("\n");
+    }
+
+    setImmediateIndexToName(env: Env) {
+        for (let code of this.options.codes ?? []) {
+            let block = new BlockProxy(this);
+            code.setImmediateIndexToName(env, block, this);
+        }
+    }
+
+    localIndexToName(idx: Index): Index {
+        if (typeof idx === "string") {
+            return idx;
+        } else {
+            let params = this.options.params || [];
+            let locals = this.options.locals || [];
+            let vals = [...params, ...locals];
+
+            let names = vals.map(it => {
+                if (typeof it === "object") {
+                    return it.name;
+                } else {
+                    return undefined;
+                }
+            });
+
+            return names[idx] ?? idx;
+        }
     }
 }

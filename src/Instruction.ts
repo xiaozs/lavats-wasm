@@ -3,7 +3,8 @@ import type { Env } from "./Env";
 import type { Func } from "./Func";
 import type { NameMap } from './Section';
 import { Stack } from './Stack';
-import { BlockOption, BlockType, CheckOption, IfOption, ImmediateType, Index, InstructionOption, NormalInstructionOption, SpecialInstructionOption, ToBufferOption, Type, TypeOption } from './Type';
+import { BlockOption, BlockType, CheckOption, FormatOption, IfOption, ImmediateType, Index, IndexType, InstructionOption, NormalInstructionOption, SpecialInstructionOption, ToBufferOption, Type, TypeOption, U32 } from './Type';
+import { addIndent } from './utils';
 
 type InstrsOption = (Omit<NormalInstructionOption, "code"> | Omit<SpecialInstructionOption, "code">) & { code: number[] };
 
@@ -31,62 +32,34 @@ function encode(instrs: InstrsOption[]): InstructionOption[] {
     return res;
 }
 
-type IndexType = "functions" | "tables" | "memories" | "globals" | "types" | "labels" | "locals";
-
-function indexToBuffer(type: IndexType, opt: ToBufferOption, index: Index): ArrayBuffer {
-    if (type === "labels") {
-        let num = opt.block.findLabelIndex(index);
-        return encodeInt(num);
-    } else if (type === "locals") {
-        let num = opt.func.findLocalIndex(index);
-        return encodeInt(num);
-    } else {
-        let num = opt.env.findIndex(type, index)!;
-        return encodeInt(num);
-    }
-}
-
-function to(...types: IndexType[]) {
-    return function (opt: ToBufferOption & { immediates: readonly any[] }) {
-        let buffers: ArrayBuffer[] = [];
-        for (let i = 0; i < types.length; i++) {
-            let type = types[i];
-            let imm = opt.immediates[i];
-            let buf = indexToBuffer(type, opt, imm);
-            buffers.push(buf);
-        }
-        return combin(buffers);
-    }
-}
-
 /**
  * 所有指令
  */
 export const instructions: readonly InstructionOption[] = encode([
-    { name: "unreachable", code: [0x00], immediates: [], params: [], results: [] },
-    { name: "nop", code: [0x01], immediates: [], params: [], results: [] },
-    { name: "block", code: [0x02], immediates: [ImmediateType.BlockType], check() { throw new Error("库代码有误") } },
-    { name: "loop", code: [0x03], immediates: [ImmediateType.BlockType], check() { throw new Error("库代码有误") } },
-    { name: "if", code: [0x04], immediates: [ImmediateType.BlockType], check() { throw new Error("库代码有误") } },
-    { name: "else", code: [0x05], immediates: [], params: [], results: [] },
-    { name: "end", code: [0x0b], immediates: [], params: [], results: [] },
+    { name: "unreachable", code: [0x00], immediateTypes: [], params: [], results: [] },
+    { name: "nop", code: [0x01], immediateTypes: [], params: [], results: [] },
+    { name: "block", code: [0x02], immediateTypes: [ImmediateType.BlockType], check() { throw new Error("库代码有误") } },
+    { name: "loop", code: [0x03], immediateTypes: [ImmediateType.BlockType], check() { throw new Error("库代码有误") } },
+    { name: "if", code: [0x04], immediateTypes: [ImmediateType.BlockType], check() { throw new Error("库代码有误") } },
+    { name: "else", code: [0x05], immediateTypes: [], params: [], results: [] },
+    { name: "end", code: [0x0b], immediateTypes: [], params: [], results: [] },
     {
         name: "br",
-        code: [0x0C], immediates: [ImmediateType.Index],
-        immediatesToBuffer: to("labels"),
+        code: [0x0C], immediateTypes: [ImmediateType.Index],
+        immediateIndexTypes: [IndexType.Label],
         check({ env, stack, immediates, block }) {
             let labelIndex = immediates[0];
             let isValidate = block.validateLabel(labelIndex);
             if (!isValidate) throw new Error(`无法找到label ${labelIndex}, 或label ${labelIndex} 超出界限`);
 
             let type = block.getType(env);
-            stack.checkStackTop(type.results, false);
+            stack.checkStackTop(type.results ?? [], false);
         }
     },
     {
         name: "br_if",
-        code: [0x0D], immediates: [ImmediateType.Index],
-        immediatesToBuffer: to("labels"),
+        code: [0x0D], immediateTypes: [ImmediateType.Index],
+        immediateIndexTypes: [IndexType.Label],
         check({ env, stack, immediates, block }) {
             let labelIndex = immediates[0];
             let isValidate = block.validateLabel(labelIndex);
@@ -97,18 +70,13 @@ export const instructions: readonly InstructionOption[] = encode([
             if (top !== Type.I32) throw new Error(`top0 参数的类型应该为 I32`);
 
             let type = block.getType(env);
-            stack.checkStackTop(type.results, false);
+            stack.checkStackTop(type.results ?? [], false);
         }
     },
     {
         name: "br_table",
-        code: [0x0E], immediates: [ImmediateType.IndexArray, ImmediateType.Index],
-        immediatesToBuffer({ immediates, block }) {
-            let idxArr = (immediates[0] as Index[]).map(it => block.findLabelIndex(it));
-            let idxArrBuffer = encodeArray(idxArr, encodeInt);
-            let defaultIndexBuffer = encodeInt(immediates[1]);
-            return combin([idxArrBuffer, defaultIndexBuffer]);
-        },
+        code: [0x0E], immediateTypes: [ImmediateType.IndexArray, ImmediateType.Index],
+        immediateIndexTypes: [IndexType.Label, IndexType.Label],
         check({ env, stack, immediates, block }) {
             let labelIndexes: Index[] = immediates[0];
             let defaultIndex: Index = immediates[1];
@@ -120,35 +88,35 @@ export const instructions: readonly InstructionOption[] = encode([
             }
 
             let type = block.getType(env);
-            stack.checkStackTop(type.results, false);
+            stack.checkStackTop(type.results ?? [], false);
         }
     },
     {
         name: "return",
-        code: [0x0F], immediates: [],
+        code: [0x0F], immediateTypes: [],
         check({ env, stack, block }) {
             let type = block.getType(env);
-            stack.checkStackTop(type.results, false);
+            stack.checkStackTop(type.results ?? [], false);
         }
     },
 
     {
         name: "call",
-        code: [0x10], immediates: [ImmediateType.Index],
-        immediatesToBuffer: to("functions"),
+        code: [0x10], immediateTypes: [ImmediateType.Index],
+        immediateIndexTypes: [IndexType.Function],
         check({ env, stack, immediates }) {
             let functionIndex = immediates[0];
             let func = env.findFunction(functionIndex);
             if (!func) throw new Error(`无法找到func ${functionIndex}`);
 
-            stack.checkStackTop(func.params);
-            stack.push(...func.results);
+            stack.checkStackTop(func.params ?? []);
+            stack.push(...func.results ?? []);
         }
     },
     {
         name: "call_indirect",
-        immediatesToBuffer: to("types", "tables"),
-        code: [0x11], immediates: [ImmediateType.Index, ImmediateType.Index],
+        code: [0x11], immediateTypes: [ImmediateType.Index, ImmediateType.Index],
+        immediateIndexTypes: [IndexType.Type, IndexType.Table],
         check({ env, stack, immediates }) {
             let typeIndex = immediates[0];
             let type = env.findType(typeIndex);
@@ -162,14 +130,14 @@ export const instructions: readonly InstructionOption[] = encode([
             if (!top) throw new Error(`空栈`);
             if (top !== Type.I32) throw new Error(`top0 参数的类型应该为 I32`);
 
-            stack.checkStackTop(type.params);
-            stack.push(...type.results);
+            stack.checkStackTop(type.params ?? []);
+            stack.push(...type.results ?? []);
         }
     },
 
     {
         name: "drop",
-        code: [0x1A], immediates: [],
+        code: [0x1A], immediateTypes: [],
         check({ stack }) {
             let top = stack.pop();
             if (!top) throw new Error(`空栈`);
@@ -177,7 +145,7 @@ export const instructions: readonly InstructionOption[] = encode([
     },
     {
         name: "select",
-        code: [0x1B], immediates: [],
+        code: [0x1B], immediateTypes: [],
         check({ stack }) {
             let top0 = stack.pop();
             let top1 = stack.pop();
@@ -193,8 +161,8 @@ export const instructions: readonly InstructionOption[] = encode([
 
     {
         name: "local.get",
-        code: [0x20], immediates: [ImmediateType.Index],
-        immediatesToBuffer: to("locals"),
+        code: [0x20], immediateTypes: [ImmediateType.Index],
+        immediateIndexTypes: [IndexType.Local],
         check({ stack, immediates, func }) {
             let localIndex = immediates[0];
             let localType = func.getLocalType(localIndex);
@@ -205,8 +173,8 @@ export const instructions: readonly InstructionOption[] = encode([
     },
     {
         name: "local.set",
-        code: [0x21], immediates: [ImmediateType.Index],
-        immediatesToBuffer: to("locals"),
+        code: [0x21], immediateTypes: [ImmediateType.Index],
+        immediateIndexTypes: [IndexType.Local],
         check({ stack, immediates, func }) {
             let localIndex = immediates[0];
             let localType = func.getLocalType(localIndex);
@@ -220,8 +188,8 @@ export const instructions: readonly InstructionOption[] = encode([
     },
     {
         name: "local.tee",
-        code: [0x22], immediates: [ImmediateType.Index],
-        immediatesToBuffer: to("locals"),
+        code: [0x22], immediateTypes: [ImmediateType.Index],
+        immediateIndexTypes: [IndexType.Local],
         check({ stack, immediates, func }) {
             let localIndex = immediates[0];
             let localType = func.getLocalType(localIndex);
@@ -235,8 +203,8 @@ export const instructions: readonly InstructionOption[] = encode([
     },
     {
         name: "global.get",
-        code: [0x23], immediates: [ImmediateType.Index],
-        immediatesToBuffer: to("globals"),
+        code: [0x23], immediateTypes: [ImmediateType.Index],
+        immediateIndexTypes: [IndexType.Global],
         check({ env, stack, immediates }) {
             let globalIndex = immediates[0];
             let global = env.findGlobal(globalIndex);
@@ -247,8 +215,8 @@ export const instructions: readonly InstructionOption[] = encode([
     },
     {
         name: "global.set",
-        code: [0x24], immediates: [ImmediateType.Index],
-        immediatesToBuffer: to("globals"),
+        code: [0x24], immediateTypes: [ImmediateType.Index],
+        immediateIndexTypes: [IndexType.Global],
         check({ env, stack, immediates }) {
             let globalIndex = immediates[0];
             let global = env.findGlobal(immediates[0]);
@@ -263,185 +231,185 @@ export const instructions: readonly InstructionOption[] = encode([
         }
     },
 
-    { name: "i32.load", code: [0x28], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I32] },
-    { name: "i64.load", code: [0x29], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
-    { name: "f32.load", code: [0x2A], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.F32] },
-    { name: "f64.load", code: [0x2B], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.F64] },
-    { name: "i32.load8_s", code: [0x2C], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I32] },
-    { name: "i32.load8_u", code: [0x2D], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I32] },
-    { name: "i32.load16_s", code: [0x2E], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I32] },
-    { name: "i32.load16_u", code: [0x2F], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I32] },
+    { name: "i32.load", code: [0x28], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I32] },
+    { name: "i64.load", code: [0x29], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
+    { name: "f32.load", code: [0x2A], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.F32] },
+    { name: "f64.load", code: [0x2B], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.F64] },
+    { name: "i32.load8_s", code: [0x2C], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I32] },
+    { name: "i32.load8_u", code: [0x2D], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I32] },
+    { name: "i32.load16_s", code: [0x2E], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I32] },
+    { name: "i32.load16_u", code: [0x2F], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I32] },
 
-    { name: "i64.load8_s", code: [0x30], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
-    { name: "i64.load8_u", code: [0x31], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
-    { name: "i64.load16_s", code: [0x32], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
-    { name: "i64.load16_u", code: [0x33], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
-    { name: "i64.load32_s", code: [0x34], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
-    { name: "i64.load32_u", code: [0x35], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
+    { name: "i64.load8_s", code: [0x30], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
+    { name: "i64.load8_u", code: [0x31], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
+    { name: "i64.load16_s", code: [0x32], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
+    { name: "i64.load16_u", code: [0x33], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
+    { name: "i64.load32_s", code: [0x34], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
+    { name: "i64.load32_u", code: [0x35], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32], results: [Type.I64] },
 
-    { name: "i32.store", code: [0x36], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I32], results: [] },
-    { name: "i64.store", code: [0x37], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I64], results: [] },
-    { name: "f32.store", code: [0x38], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.F32], results: [] },
-    { name: "f64.store", code: [0x39], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.F64], results: [] },
-    { name: "i32.store8", code: [0x3A], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I32], results: [] },
-    { name: "i32.store16", code: [0x3B], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I32], results: [] },
-    { name: "i64.store8", code: [0x3C], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I64], results: [] },
-    { name: "i64.store16", code: [0x3D], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I64], results: [] },
-    { name: "i64.store32", code: [0x3E], immediates: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I64], results: [] },
+    { name: "i32.store", code: [0x36], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I32], results: [] },
+    { name: "i64.store", code: [0x37], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I64], results: [] },
+    { name: "f32.store", code: [0x38], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.F32], results: [] },
+    { name: "f64.store", code: [0x39], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.F64], results: [] },
+    { name: "i32.store8", code: [0x3A], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I32], results: [] },
+    { name: "i32.store16", code: [0x3B], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I32], results: [] },
+    { name: "i64.store8", code: [0x3C], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I64], results: [] },
+    { name: "i64.store16", code: [0x3D], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I64], results: [] },
+    { name: "i64.store32", code: [0x3E], immediateTypes: [ImmediateType.I32, ImmediateType.I32], params: [Type.I32, Type.I64], results: [] },
 
-    { name: "memory.size", code: [0x3F], immediates: [ImmediateType.Index], immediatesToBuffer: to("memories"), params: [], results: [Type.I32] },
-    { name: "memory.grow", code: [0x40], immediates: [ImmediateType.Index], immediatesToBuffer: to("memories"), params: [Type.I32], results: [Type.I32] },
+    { name: "memory.size", code: [0x3F], immediateTypes: [ImmediateType.Index], immediateIndexTypes: [IndexType.Memory], params: [], results: [Type.I32] },
+    { name: "memory.grow", code: [0x40], immediateTypes: [ImmediateType.Index], immediateIndexTypes: [IndexType.Memory], params: [Type.I32], results: [Type.I32] },
 
-    { name: "i32.const", code: [0x41], immediates: [ImmediateType.I32], params: [], results: [Type.I32] },
-    { name: "i64.const", code: [0x42], immediates: [ImmediateType.I64], params: [], results: [Type.I64] },
-    { name: "f32.const", code: [0x43], immediates: [ImmediateType.F32], params: [], results: [Type.F32] },
-    { name: "f64.const", code: [0x44], immediates: [ImmediateType.F64], params: [], results: [Type.F64] },
+    { name: "i32.const", code: [0x41], immediateTypes: [ImmediateType.I32], params: [], results: [Type.I32] },
+    { name: "i64.const", code: [0x42], immediateTypes: [ImmediateType.I64], params: [], results: [Type.I64] },
+    { name: "f32.const", code: [0x43], immediateTypes: [ImmediateType.F32], params: [], results: [Type.F32] },
+    { name: "f64.const", code: [0x44], immediateTypes: [ImmediateType.F64], params: [], results: [Type.F64] },
 
-    { name: "i32.eqz", code: [0x45], immediates: [], params: [Type.I32], results: [Type.I32] },
-    { name: "i32.eq", code: [0x46], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.ne", code: [0x47], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.lt_s", code: [0x48], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.lt_u", code: [0x49], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.gt_s", code: [0x4A], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.gt_u", code: [0x4B], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.le_s", code: [0x4C], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.le_u", code: [0x4D], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.ge_s", code: [0x4E], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.ge_u", code: [0x4F], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.eqz", code: [0x45], immediateTypes: [], params: [Type.I32], results: [Type.I32] },
+    { name: "i32.eq", code: [0x46], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.ne", code: [0x47], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.lt_s", code: [0x48], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.lt_u", code: [0x49], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.gt_s", code: [0x4A], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.gt_u", code: [0x4B], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.le_s", code: [0x4C], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.le_u", code: [0x4D], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.ge_s", code: [0x4E], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.ge_u", code: [0x4F], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
 
-    { name: "i64.eqz", code: [0x50], immediates: [], params: [Type.I64], results: [Type.I32] },
-    { name: "i64.eq", code: [0x51], immediates: [], params: [Type.I64, Type.I64], results: [Type.I32] },
-    { name: "i64.ne", code: [0x52], immediates: [], params: [Type.I64, Type.I64], results: [Type.I32] },
-    { name: "i64.lt_s", code: [0x53], immediates: [], params: [Type.I64, Type.I64], results: [Type.I32] },
-    { name: "i64.lt_u", code: [0x54], immediates: [], params: [Type.I64, Type.I64], results: [Type.I32] },
-    { name: "i64.gt_s", code: [0x55], immediates: [], params: [Type.I64, Type.I64], results: [Type.I32] },
-    { name: "i64.gt_u", code: [0x56], immediates: [], params: [Type.I64, Type.I64], results: [Type.I32] },
-    { name: "i64.le_s", code: [0x57], immediates: [], params: [Type.I64, Type.I64], results: [Type.I32] },
-    { name: "i64.le_u", code: [0x58], immediates: [], params: [Type.I64, Type.I64], results: [Type.I32] },
-    { name: "i64.ge_s", code: [0x59], immediates: [], params: [Type.I64, Type.I64], results: [Type.I32] },
-    { name: "i64.ge_u", code: [0x5A], immediates: [], params: [Type.I64, Type.I64], results: [Type.I32] },
-    { name: "f32.eq", code: [0x5B], immediates: [], params: [Type.F32], results: [Type.I32] },
-    { name: "f32.ne", code: [0x5C], immediates: [], params: [Type.F32, Type.F32], results: [Type.I32] },
-    { name: "f32.lt", code: [0x5D], immediates: [], params: [Type.F32, Type.F32], results: [Type.I32] },
-    { name: "f32.gt", code: [0x5E], immediates: [], params: [Type.F32, Type.F32], results: [Type.I32] },
-    { name: "f32.le", code: [0x5F], immediates: [], params: [Type.F32, Type.F32], results: [Type.I32] },
+    { name: "i64.eqz", code: [0x50], immediateTypes: [], params: [Type.I64], results: [Type.I32] },
+    { name: "i64.eq", code: [0x51], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I32] },
+    { name: "i64.ne", code: [0x52], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I32] },
+    { name: "i64.lt_s", code: [0x53], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I32] },
+    { name: "i64.lt_u", code: [0x54], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I32] },
+    { name: "i64.gt_s", code: [0x55], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I32] },
+    { name: "i64.gt_u", code: [0x56], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I32] },
+    { name: "i64.le_s", code: [0x57], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I32] },
+    { name: "i64.le_u", code: [0x58], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I32] },
+    { name: "i64.ge_s", code: [0x59], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I32] },
+    { name: "i64.ge_u", code: [0x5A], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I32] },
+    { name: "f32.eq", code: [0x5B], immediateTypes: [], params: [Type.F32], results: [Type.I32] },
+    { name: "f32.ne", code: [0x5C], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.I32] },
+    { name: "f32.lt", code: [0x5D], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.I32] },
+    { name: "f32.gt", code: [0x5E], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.I32] },
+    { name: "f32.le", code: [0x5F], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.I32] },
 
-    { name: "f32.ge", code: [0x60], immediates: [], params: [Type.F32, Type.F32], results: [Type.I32] },
-    { name: "f64.eq", code: [0x61], immediates: [], params: [Type.F64, Type.F64], results: [Type.I32] },
-    { name: "f64.ne", code: [0x62], immediates: [], params: [Type.F64, Type.F64], results: [Type.I32] },
-    { name: "f64.lt", code: [0x63], immediates: [], params: [Type.F64, Type.F64], results: [Type.I32] },
-    { name: "f64.gt", code: [0x64], immediates: [], params: [Type.F64, Type.F64], results: [Type.I32] },
-    { name: "f64.le", code: [0x65], immediates: [], params: [Type.F64, Type.F64], results: [Type.I32] },
-    { name: "f64.ge", code: [0x66], immediates: [], params: [Type.F64, Type.F64], results: [Type.I32] },
-    { name: "i32.clz", code: [0x67], immediates: [], params: [Type.I32], results: [Type.I32] },
-    { name: "i32.ctz", code: [0x68], immediates: [], params: [Type.I32], results: [Type.I32] },
-    { name: "i32.popcnt", code: [0x69], immediates: [], params: [Type.I32], results: [Type.I32] },
-    { name: "i32.add", code: [0x6A], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.sub", code: [0x6B], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.mul", code: [0x6C], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.div_s", code: [0x6D], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.div_u", code: [0x6E], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.rem_s", code: [0x6F], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "f32.ge", code: [0x60], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.I32] },
+    { name: "f64.eq", code: [0x61], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.I32] },
+    { name: "f64.ne", code: [0x62], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.I32] },
+    { name: "f64.lt", code: [0x63], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.I32] },
+    { name: "f64.gt", code: [0x64], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.I32] },
+    { name: "f64.le", code: [0x65], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.I32] },
+    { name: "f64.ge", code: [0x66], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.I32] },
+    { name: "i32.clz", code: [0x67], immediateTypes: [], params: [Type.I32], results: [Type.I32] },
+    { name: "i32.ctz", code: [0x68], immediateTypes: [], params: [Type.I32], results: [Type.I32] },
+    { name: "i32.popcnt", code: [0x69], immediateTypes: [], params: [Type.I32], results: [Type.I32] },
+    { name: "i32.add", code: [0x6A], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.sub", code: [0x6B], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.mul", code: [0x6C], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.div_s", code: [0x6D], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.div_u", code: [0x6E], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.rem_s", code: [0x6F], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
 
-    { name: "i32.rem_u", code: [0x70], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.and", code: [0x71], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.or", code: [0x72], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.xor", code: [0x73], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.shl", code: [0x74], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.shr_s", code: [0x75], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.shr_u", code: [0x76], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.rotl", code: [0x77], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i32.rotr", code: [0x78], immediates: [], params: [Type.I32, Type.I32], results: [Type.I32] },
-    { name: "i64.clz", code: [0x79], immediates: [], params: [Type.I64], results: [Type.I64] },
-    { name: "i64.ctz", code: [0x7A], immediates: [], params: [Type.I64], results: [Type.I64] },
-    { name: "i64.popcnt", code: [0x7B], immediates: [], params: [Type.I64], results: [Type.I64] },
-    { name: "i64.add", code: [0x7C], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.sub", code: [0x7D], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.mul", code: [0x7E], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.div_s", code: [0x7F], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i32.rem_u", code: [0x70], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.and", code: [0x71], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.or", code: [0x72], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.xor", code: [0x73], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.shl", code: [0x74], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.shr_s", code: [0x75], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.shr_u", code: [0x76], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.rotl", code: [0x77], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i32.rotr", code: [0x78], immediateTypes: [], params: [Type.I32, Type.I32], results: [Type.I32] },
+    { name: "i64.clz", code: [0x79], immediateTypes: [], params: [Type.I64], results: [Type.I64] },
+    { name: "i64.ctz", code: [0x7A], immediateTypes: [], params: [Type.I64], results: [Type.I64] },
+    { name: "i64.popcnt", code: [0x7B], immediateTypes: [], params: [Type.I64], results: [Type.I64] },
+    { name: "i64.add", code: [0x7C], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.sub", code: [0x7D], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.mul", code: [0x7E], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.div_s", code: [0x7F], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
 
-    { name: "i64.div_u", code: [0x80], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.rem_s", code: [0x81], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.rem_u", code: [0x82], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.and", code: [0x83], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.or", code: [0x84], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.xor", code: [0x85], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.shl", code: [0x86], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.shr_s", code: [0x87], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.shr_u", code: [0x88], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.rotl", code: [0x89], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "i64.rotr", code: [0x8A], immediates: [], params: [Type.I64, Type.I64], results: [Type.I64] },
-    { name: "f32.abs", code: [0x8B], immediates: [], params: [Type.F32], results: [Type.F32] },
-    { name: "f32.neg", code: [0x8C], immediates: [], params: [Type.F32], results: [Type.F32] },
-    { name: "f32.ceil", code: [0x8D], immediates: [], params: [Type.F32], results: [Type.F32] },
-    { name: "f32.floor", code: [0x8E], immediates: [], params: [Type.F32], results: [Type.F32] },
-    { name: "f32.trunc", code: [0x8F], immediates: [], params: [Type.F32], results: [Type.F32] },
+    { name: "i64.div_u", code: [0x80], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.rem_s", code: [0x81], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.rem_u", code: [0x82], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.and", code: [0x83], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.or", code: [0x84], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.xor", code: [0x85], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.shl", code: [0x86], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.shr_s", code: [0x87], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.shr_u", code: [0x88], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.rotl", code: [0x89], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "i64.rotr", code: [0x8A], immediateTypes: [], params: [Type.I64, Type.I64], results: [Type.I64] },
+    { name: "f32.abs", code: [0x8B], immediateTypes: [], params: [Type.F32], results: [Type.F32] },
+    { name: "f32.neg", code: [0x8C], immediateTypes: [], params: [Type.F32], results: [Type.F32] },
+    { name: "f32.ceil", code: [0x8D], immediateTypes: [], params: [Type.F32], results: [Type.F32] },
+    { name: "f32.floor", code: [0x8E], immediateTypes: [], params: [Type.F32], results: [Type.F32] },
+    { name: "f32.trunc", code: [0x8F], immediateTypes: [], params: [Type.F32], results: [Type.F32] },
 
-    { name: "f32.nearest", code: [0x90], immediates: [], params: [Type.F32], results: [Type.F32] },
-    { name: "f32.sqrt", code: [0x91], immediates: [], params: [Type.F32], results: [Type.F32] },
-    { name: "f32.add", code: [0x92], immediates: [], params: [Type.F32, Type.F32], results: [Type.F32] },
-    { name: "f32.sub", code: [0x93], immediates: [], params: [Type.F32, Type.F32], results: [Type.F32] },
-    { name: "f32.mul", code: [0x94], immediates: [], params: [Type.F32, Type.F32], results: [Type.F32] },
-    { name: "f32.div", code: [0x95], immediates: [], params: [Type.F32, Type.F32], results: [Type.F32] },
-    { name: "f32.min", code: [0x96], immediates: [], params: [Type.F32, Type.F32], results: [Type.F32] },
-    { name: "f32.max", code: [0x97], immediates: [], params: [Type.F32, Type.F32], results: [Type.F32] },
-    { name: "f32.copysign", code: [0x98], immediates: [], params: [Type.F32, Type.F32], results: [Type.F32] },
-    { name: "f64.abs", code: [0x99], immediates: [], params: [Type.F64], results: [Type.F64] },
-    { name: "f64.neg", code: [0x9A], immediates: [], params: [Type.F64], results: [Type.F64] },
-    { name: "f64.ceil", code: [0x9B], immediates: [], params: [Type.F64], results: [Type.F64] },
-    { name: "f64.floor", code: [0x9C], immediates: [], params: [Type.F64], results: [Type.F64] },
-    { name: "f64.trunc", code: [0x9D], immediates: [], params: [Type.F64], results: [Type.F64] },
-    { name: "f64.nearest", code: [0x9E], immediates: [], params: [Type.F64], results: [Type.F64] },
-    { name: "f64.sqrt", code: [0x9F], immediates: [], params: [Type.F64], results: [Type.F64] },
+    { name: "f32.nearest", code: [0x90], immediateTypes: [], params: [Type.F32], results: [Type.F32] },
+    { name: "f32.sqrt", code: [0x91], immediateTypes: [], params: [Type.F32], results: [Type.F32] },
+    { name: "f32.add", code: [0x92], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.F32] },
+    { name: "f32.sub", code: [0x93], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.F32] },
+    { name: "f32.mul", code: [0x94], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.F32] },
+    { name: "f32.div", code: [0x95], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.F32] },
+    { name: "f32.min", code: [0x96], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.F32] },
+    { name: "f32.max", code: [0x97], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.F32] },
+    { name: "f32.copysign", code: [0x98], immediateTypes: [], params: [Type.F32, Type.F32], results: [Type.F32] },
+    { name: "f64.abs", code: [0x99], immediateTypes: [], params: [Type.F64], results: [Type.F64] },
+    { name: "f64.neg", code: [0x9A], immediateTypes: [], params: [Type.F64], results: [Type.F64] },
+    { name: "f64.ceil", code: [0x9B], immediateTypes: [], params: [Type.F64], results: [Type.F64] },
+    { name: "f64.floor", code: [0x9C], immediateTypes: [], params: [Type.F64], results: [Type.F64] },
+    { name: "f64.trunc", code: [0x9D], immediateTypes: [], params: [Type.F64], results: [Type.F64] },
+    { name: "f64.nearest", code: [0x9E], immediateTypes: [], params: [Type.F64], results: [Type.F64] },
+    { name: "f64.sqrt", code: [0x9F], immediateTypes: [], params: [Type.F64], results: [Type.F64] },
 
-    { name: "f64.add", code: [0xA0], immediates: [], params: [Type.F64, Type.F64], results: [Type.F64] },
-    { name: "f64.sub", code: [0xA1], immediates: [], params: [Type.F64, Type.F64], results: [Type.F64] },
-    { name: "f64.mul", code: [0xA2], immediates: [], params: [Type.F64, Type.F64], results: [Type.F64] },
-    { name: "f64.div", code: [0xA3], immediates: [], params: [Type.F64, Type.F64], results: [Type.F64] },
-    { name: "f64.min", code: [0xA4], immediates: [], params: [Type.F64, Type.F64], results: [Type.F64] },
-    { name: "f64.max", code: [0xA5], immediates: [], params: [Type.F64, Type.F64], results: [Type.F64] },
-    { name: "f64.copysign", code: [0xA6], immediates: [], params: [Type.F64, Type.F64], results: [Type.F64] },
-    { name: "i32.wrap_i64", code: [0xA7], immediates: [], params: [Type.I64], results: [Type.I32] },
-    { name: "i32.trunc_f32_s", code: [0xA8], immediates: [], params: [Type.F32], results: [Type.I32] },
-    { name: "i32.trunc_f32_u", code: [0xA9], immediates: [], params: [Type.F32], results: [Type.I32] },
-    { name: "i32.trunc_f64_s", code: [0xAA], immediates: [], params: [Type.F64], results: [Type.I32] },
-    { name: "i32.trunc_f64_u", code: [0xAB], immediates: [], params: [Type.F64], results: [Type.I32] },
-    { name: "i64.extend_i32_s", code: [0xAC], immediates: [], params: [Type.I32], results: [Type.I64] },
-    { name: "i64.extend_i32_u", code: [0xAD], immediates: [], params: [Type.I32], results: [Type.I64] },
-    { name: "i64.trunc_f32_s", code: [0xAE], immediates: [], params: [Type.F32], results: [Type.I64] },
-    { name: "i64.trunc_f32_u", code: [0xAF], immediates: [], params: [Type.F32], results: [Type.I64] },
+    { name: "f64.add", code: [0xA0], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.F64] },
+    { name: "f64.sub", code: [0xA1], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.F64] },
+    { name: "f64.mul", code: [0xA2], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.F64] },
+    { name: "f64.div", code: [0xA3], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.F64] },
+    { name: "f64.min", code: [0xA4], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.F64] },
+    { name: "f64.max", code: [0xA5], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.F64] },
+    { name: "f64.copysign", code: [0xA6], immediateTypes: [], params: [Type.F64, Type.F64], results: [Type.F64] },
+    { name: "i32.wrap_i64", code: [0xA7], immediateTypes: [], params: [Type.I64], results: [Type.I32] },
+    { name: "i32.trunc_f32_s", code: [0xA8], immediateTypes: [], params: [Type.F32], results: [Type.I32] },
+    { name: "i32.trunc_f32_u", code: [0xA9], immediateTypes: [], params: [Type.F32], results: [Type.I32] },
+    { name: "i32.trunc_f64_s", code: [0xAA], immediateTypes: [], params: [Type.F64], results: [Type.I32] },
+    { name: "i32.trunc_f64_u", code: [0xAB], immediateTypes: [], params: [Type.F64], results: [Type.I32] },
+    { name: "i64.extend_i32_s", code: [0xAC], immediateTypes: [], params: [Type.I32], results: [Type.I64] },
+    { name: "i64.extend_i32_u", code: [0xAD], immediateTypes: [], params: [Type.I32], results: [Type.I64] },
+    { name: "i64.trunc_f32_s", code: [0xAE], immediateTypes: [], params: [Type.F32], results: [Type.I64] },
+    { name: "i64.trunc_f32_u", code: [0xAF], immediateTypes: [], params: [Type.F32], results: [Type.I64] },
 
-    { name: "i64.trunc_f64_s", code: [0xB0], immediates: [], params: [Type.F64], results: [Type.I64] },
-    { name: "i64.trunc_f64_u", code: [0xB1], immediates: [], params: [Type.F64], results: [Type.I64] },
-    { name: "f32.convert_i32_s", code: [0xB2], immediates: [], params: [Type.I32], results: [Type.F32] },
-    { name: "f32.convert_i32_u", code: [0xB3], immediates: [], params: [Type.I32], results: [Type.F32] },
-    { name: "f32.convert_i64_s", code: [0xB4], immediates: [], params: [Type.I64], results: [Type.F32] },
-    { name: "f32.convert_i64_u", code: [0xB5], immediates: [], params: [Type.I64], results: [Type.F32] },
-    { name: "f32.demote_f64", code: [0xB6], immediates: [], params: [Type.F64], results: [Type.F32] },
-    { name: "f64.convert_i32_s", code: [0xB7], immediates: [], params: [Type.I32], results: [Type.F64] },
-    { name: "f64.convert_i32_u", code: [0xB8], immediates: [], params: [Type.I32], results: [Type.F64] },
-    { name: "f64.convert_i64_s", code: [0xB9], immediates: [], params: [Type.I64], results: [Type.F64] },
-    { name: "f64.convert_i64_u", code: [0xBA], immediates: [], params: [Type.I64], results: [Type.F64] },
-    { name: "f64.promote_f32", code: [0xBB], immediates: [], params: [Type.F32], results: [Type.F64] },
-    { name: "i32.reinterpret_f32", code: [0xBC], immediates: [], params: [Type.F32], results: [Type.I32] },
-    { name: "i64.reinterpret_f64", code: [0xBD], immediates: [], params: [Type.F64], results: [Type.I64] },
-    { name: "f32.reinterpret_i32", code: [0xBE], immediates: [], params: [Type.I32], results: [Type.F32] },
-    { name: "f64.reinterpret_i64", code: [0xBF], immediates: [], params: [Type.I64], results: [Type.F64] },
+    { name: "i64.trunc_f64_s", code: [0xB0], immediateTypes: [], params: [Type.F64], results: [Type.I64] },
+    { name: "i64.trunc_f64_u", code: [0xB1], immediateTypes: [], params: [Type.F64], results: [Type.I64] },
+    { name: "f32.convert_i32_s", code: [0xB2], immediateTypes: [], params: [Type.I32], results: [Type.F32] },
+    { name: "f32.convert_i32_u", code: [0xB3], immediateTypes: [], params: [Type.I32], results: [Type.F32] },
+    { name: "f32.convert_i64_s", code: [0xB4], immediateTypes: [], params: [Type.I64], results: [Type.F32] },
+    { name: "f32.convert_i64_u", code: [0xB5], immediateTypes: [], params: [Type.I64], results: [Type.F32] },
+    { name: "f32.demote_f64", code: [0xB6], immediateTypes: [], params: [Type.F64], results: [Type.F32] },
+    { name: "f64.convert_i32_s", code: [0xB7], immediateTypes: [], params: [Type.I32], results: [Type.F64] },
+    { name: "f64.convert_i32_u", code: [0xB8], immediateTypes: [], params: [Type.I32], results: [Type.F64] },
+    { name: "f64.convert_i64_s", code: [0xB9], immediateTypes: [], params: [Type.I64], results: [Type.F64] },
+    { name: "f64.convert_i64_u", code: [0xBA], immediateTypes: [], params: [Type.I64], results: [Type.F64] },
+    { name: "f64.promote_f32", code: [0xBB], immediateTypes: [], params: [Type.F32], results: [Type.F64] },
+    { name: "i32.reinterpret_f32", code: [0xBC], immediateTypes: [], params: [Type.F32], results: [Type.I32] },
+    { name: "i64.reinterpret_f64", code: [0xBD], immediateTypes: [], params: [Type.F64], results: [Type.I64] },
+    { name: "f32.reinterpret_i32", code: [0xBE], immediateTypes: [], params: [Type.I32], results: [Type.F32] },
+    { name: "f64.reinterpret_i64", code: [0xBF], immediateTypes: [], params: [Type.I64], results: [Type.F64] },
 
-    { name: "i32.extend8_s", code: [0xC0], immediates: [], params: [Type.I32], results: [Type.I32] },
-    { name: "i32.extend16_s", code: [0xC1], immediates: [], params: [Type.I32], results: [Type.I32] },
-    { name: "i64.extend8_s", code: [0xC2], immediates: [], params: [Type.I64], results: [Type.I64] },
-    { name: "i64.extend16_s", code: [0xC3], immediates: [], params: [Type.I64], results: [Type.I64] },
-    { name: "i64.extend32_s", code: [0xC4], immediates: [], params: [Type.I64], results: [Type.I64] },
+    { name: "i32.extend8_s", code: [0xC0], immediateTypes: [], params: [Type.I32], results: [Type.I32] },
+    { name: "i32.extend16_s", code: [0xC1], immediateTypes: [], params: [Type.I32], results: [Type.I32] },
+    { name: "i64.extend8_s", code: [0xC2], immediateTypes: [], params: [Type.I64], results: [Type.I64] },
+    { name: "i64.extend16_s", code: [0xC3], immediateTypes: [], params: [Type.I64], results: [Type.I64] },
+    { name: "i64.extend32_s", code: [0xC4], immediateTypes: [], params: [Type.I64], results: [Type.I64] },
 
-    { name: "i32.trunc_sat_f32_s", code: [0xfc, 0x00], immediates: [], params: [Type.F32], results: [Type.I32] },
-    { name: "i32.trunc_sat_f32_u", code: [0xfc, 0x01], immediates: [], params: [Type.F32], results: [Type.I32] },
-    { name: "i32.trunc_sat_f64_s", code: [0xfc, 0x02], immediates: [], params: [Type.F64], results: [Type.I32] },
-    { name: "i32.trunc_sat_f64_u", code: [0xfc, 0x03], immediates: [], params: [Type.F64], results: [Type.I32] },
-    { name: "i64.trunc_sat_f32_s", code: [0xfc, 0x04], immediates: [], params: [Type.F32], results: [Type.I64] },
-    { name: "i64.trunc_sat_f32_u", code: [0xfc, 0x05], immediates: [], params: [Type.F32], results: [Type.I64] },
-    { name: "i64.trunc_sat_f64_s", code: [0xfc, 0x06], immediates: [], params: [Type.F64], results: [Type.I64] },
-    { name: "i64.trunc_sat_f64_u", code: [0xfc, 0x07], immediates: [], params: [Type.F64], results: [Type.I64] },
+    { name: "i32.trunc_sat_f32_s", code: [0xfc, 0x00], immediateTypes: [], params: [Type.F32], results: [Type.I32] },
+    { name: "i32.trunc_sat_f32_u", code: [0xfc, 0x01], immediateTypes: [], params: [Type.F32], results: [Type.I32] },
+    { name: "i32.trunc_sat_f64_s", code: [0xfc, 0x02], immediateTypes: [], params: [Type.F64], results: [Type.I32] },
+    { name: "i32.trunc_sat_f64_u", code: [0xfc, 0x03], immediateTypes: [], params: [Type.F64], results: [Type.I32] },
+    { name: "i64.trunc_sat_f32_s", code: [0xfc, 0x04], immediateTypes: [], params: [Type.F32], results: [Type.I64] },
+    { name: "i64.trunc_sat_f32_u", code: [0xfc, 0x05], immediateTypes: [], params: [Type.F32], results: [Type.I64] },
+    { name: "i64.trunc_sat_f64_s", code: [0xfc, 0x06], immediateTypes: [], params: [Type.F64], results: [Type.I64] },
+    { name: "i64.trunc_sat_f64_u", code: [0xfc, 0x07], immediateTypes: [], params: [Type.F64], results: [Type.I64] },
 ]);
 
 /**
@@ -469,7 +437,7 @@ export class Instruction {
      */
     constructor(
         readonly instrOption: InstructionOption,
-        readonly immediates: readonly any[]
+        public immediates: any[]
     ) { }
 
     /**
@@ -487,15 +455,40 @@ export class Instruction {
             opt.stack.push(...this.instrOption.results);
         }
     }
-    toBuffer(opt: ToBufferOption): ArrayBuffer {
-        let { immediatesToBuffer } = this.instrOption;
-        if (immediatesToBuffer) {
-            return immediatesToBuffer({
-                ...opt,
-                immediates: this.immediates,
-            });
-        }
+    private immediateIndexesToBuffer(opt: ToBufferOption) {
+        let buffers: ArrayBuffer[] = [];
+        let immTypes = this.instrOption.immediateTypes;
+        let indexTypes = this.instrOption.immediateIndexTypes ?? [];
+        for (let i = 0; i < indexTypes.length; i++) {
+            let immType = immTypes[i];
+            let idxType = indexTypes[i];
+            let imm = this.immediates[i];
 
+            if (immType === ImmediateType.IndexArray) {
+                let buf = encodeArray(imm as Index[], it => this.indexToBuffer(idxType, opt, it));
+                buffers.push(buf);
+            } else {
+                let buf = this.indexToBuffer(idxType, opt, imm);
+                buffers.push(buf);
+            }
+        }
+        return combin(buffers);
+    }
+
+    private indexToBuffer(type: IndexType, opt: ToBufferOption, index: Index): ArrayBuffer {
+        if (type === IndexType.Label) {
+            let num = opt.block.findLabelIndex(index);
+            return encodeInt(num);
+        } else if (type === IndexType.Local) {
+            let num = opt.func.findLocalIndex(index);
+            return encodeInt(num);
+        } else {
+            let num = opt.env.findIndex(type, index)!;
+            return encodeInt(num);
+        }
+    }
+
+    private normalImmediatesToBuffer() {
         let map: any = {
             [ImmediateType.I32]: encodeInt,
             [ImmediateType.I64]: encodeInt,
@@ -504,8 +497,8 @@ export class Instruction {
             [ImmediateType.V128]: () => { throw new Error("todo") },
         }
 
-        let buffers = [this.instrOption.code];
-        let immTypes = this.instrOption.immediates;
+        let buffers: ArrayBuffer[] = [];
+        let immTypes = this.instrOption.immediateTypes;
         for (let i = 0; i < immTypes.length; i++) {
             let type = immTypes[i];
             let imm = this.immediates[i];
@@ -515,6 +508,75 @@ export class Instruction {
             buffers.push(res);
         }
         return combin(buffers);
+    }
+
+    toBuffer(opt: ToBufferOption): ArrayBuffer {
+        let isIndex = this.instrOption.immediateIndexTypes?.length;
+        let code = this.instrOption.code;
+        let imms = isIndex ?
+            this.immediateIndexesToBuffer(opt) :
+            this.normalImmediatesToBuffer();
+        return combin([code, imms]);
+    }
+
+    toString(option: Required<FormatOption>): string {
+        let imms: (Index | any)[] = [];
+        for (let i = 0; i < this.immediates.length; i++) {
+            let imm = this.immediates[i];
+            let immType = this.instrOption.immediateTypes[i];
+
+            switch (immType) {
+                case ImmediateType.I32:
+                case ImmediateType.I64:
+                case ImmediateType.F32:
+                case ImmediateType.F64:
+                case ImmediateType.Index:
+                    imm = typeof imm === "string" ? `$${imm}` : imm;
+                    imms.push(imm);
+                    break;
+                case ImmediateType.IndexArray:
+                    imm = imm.map((it: Index) => typeof it === "string" ? `$${it}` : it).join(" ");
+                    imms.push(imm);
+                    break;
+                case ImmediateType.V128:
+                    throw new Error("todo");
+                    break;
+                case ImmediateType.BlockType:
+                    throw new Error("库代码有误");
+            }
+        }
+        return `${this.instrOption.name} ${imms.join(" ")}`;
+    }
+    setImmediateIndexToName(env: Env, block: BlockProxy, func: Func) {
+        let indexTypes = this.instrOption.immediateIndexTypes;
+        if (indexTypes?.length) {
+            let map = {
+                [IndexType.Function]: (imm: Index) => env.functionIndexToName(imm),
+                [IndexType.Table]: (imm: Index) => env.tableIndexToName(imm),
+                [IndexType.Memory]: (imm: Index) => env.memoryIndexToName(imm),
+                [IndexType.Global]: (imm: Index) => env.globalIndexToName(imm),
+                [IndexType.Type]: (imm: Index) => env.typeIndexToName(imm),
+                [IndexType.Label]: (imm: Index) => block.labelIndexToName(imm),
+                [IndexType.Local]: (imm: Index) => func.localIndexToName(imm),
+            }
+
+            let newImms: any[] = [];
+            for (let i = 0; i < indexTypes.length; i++) {
+                let imm = this.immediates[i];
+                let idxType = indexTypes[i];
+                let fn = map[idxType];
+
+                let immType = this.instrOption.immediateTypes[i];
+                if (immType === ImmediateType.IndexArray) {
+                    let names = (imm as Index[]).map(it => fn(it));
+                    newImms.push(names);
+                } else {
+                    let name = fn(imm);
+                    newImms.push(name);
+                }
+            }
+            this.immediates = newImms;
+        }
     }
 }
 
@@ -539,6 +601,24 @@ export abstract class BlockInstruction extends Instruction {
         }
     }
 
+    protected getTypeString(type: BlockType | Index): string {
+        if (typeof type === "string") {
+            return `(type $${type})`;
+        } if (type < 0) {
+            let map: Record<number, string> = {
+                [BlockType.I32]: "(result i32)",
+                [BlockType.I64]: "(result i64)",
+                [BlockType.F32]: "(result f32)",
+                [BlockType.F64]: "(result f64)",
+                [BlockType.V128]: "(result v128)",
+                [BlockType.Empty]: "",
+            }
+            return map[type];
+        } else {
+            return `(type ${type})`;
+        }
+    }
+
     /**
      * 检查代码
      * @param opt 检查配置项
@@ -554,7 +634,7 @@ export abstract class BlockInstruction extends Instruction {
                 block: opt.block.createSubBlock(this)
             });
         }
-        if (stack.length !== type.results.length) throw new Error("出参不匹配");
+        if (stack.length !== type.results?.length) throw new Error("出参不匹配");
         stack.checkStackTop(type.results, false);
     }
 
@@ -569,12 +649,15 @@ export abstract class BlockInstruction extends Instruction {
     abstract get type(): BlockType | Index;
 
     abstract getLables(): (string | undefined)[];
+
+    abstract toString(option: Required<FormatOption>): string;
+    abstract setImmediateIndexToName(env: Env, block: BlockProxy, func: Func): void;
 }
 
 /**
  * 一般块级指令
  */
-export class NormalBlockInstruction extends BlockInstruction {
+export abstract class NormalBlockInstruction extends BlockInstruction {
     /**
      * 
      */
@@ -598,11 +681,11 @@ export class NormalBlockInstruction extends BlockInstruction {
         let type = this.getType(opt.env);
         if (!type) throw new Error(`type ${blockType}不存在`);
 
-        opt.stack.checkStackTop(type.params);
+        opt.stack.checkStackTop(type.params ?? []);
 
         this.checkCode(opt, type, this.blockOption.codes || []);
 
-        opt.stack.push(...type.results);
+        opt.stack.push(...type.results ?? []);
     }
     toBuffer(opt: ToBufferOption): ArrayBuffer {
         opt = {
@@ -629,6 +712,24 @@ export class NormalBlockInstruction extends BlockInstruction {
 
         return res;
     }
+    toString(option: Required<FormatOption>): string {
+        let content = this.blockOption.codes?.map(it => it.toString(option)) ?? [];
+
+        let typeStr = this.getTypeString(this.blockOption.type);
+
+        let res: string[] = [
+            this.blockOption.label ? `${this.instrOption.name} $${this.blockOption.label} ${typeStr}` : `${this.instrOption.name} ${typeStr}`,
+            addIndent(content.join("\n"), " ", option.indent),
+            "end"
+        ];
+        return res.join("\n");
+    }
+    setImmediateIndexToName(env: Env, block: BlockProxy, func: Func) {
+        for (let code of this.blockOption.codes ?? []) {
+            block = block.createSubBlock(this);
+            code.setImmediateIndexToName(env, block, func);
+        }
+    }
 }
 
 /**
@@ -650,13 +751,13 @@ export class LoopBlock extends NormalBlockInstruction {
  */
 export class IfBlock extends BlockInstruction {
     get label() {
-        return this.ifOption.label;
+        return this.blockOption.label;
     }
     get type() {
-        return this.ifOption.type;
+        return this.blockOption.type;
     }
-    constructor(private ifOption: IfOption) {
-        super(instructionSet["if"], [ifOption.type]);
+    constructor(private blockOption: IfOption) {
+        super(instructionSet["if"], [blockOption.type]);
     }
     check(opt: Omit<CheckOption, "immediates">) {
         let blockType = this.immediates[0];
@@ -667,12 +768,12 @@ export class IfBlock extends BlockInstruction {
         if (!top) throw new Error(`空栈`);
         if (top !== Type.I32) throw new Error(`top0 参数的类型应该为 I32`);
 
-        opt.stack.checkStackTop(type.params);
+        opt.stack.checkStackTop(type.params ?? []);
 
-        this.checkCode(opt, type, this.ifOption.then || []);
-        this.checkCode(opt, type, this.ifOption.else || []);
+        this.checkCode(opt, type, this.blockOption.then || []);
+        this.checkCode(opt, type, this.blockOption.else || []);
 
-        opt.stack.push(...type.results);
+        opt.stack.push(...type.results ?? []);
     }
     toBuffer(opt: ToBufferOption): ArrayBuffer {
         opt = {
@@ -680,20 +781,20 @@ export class IfBlock extends BlockInstruction {
             block: opt.block.createSubBlock(this)
         };
 
-        if (this.ifOption.else) {
+        if (this.blockOption.else) {
             return combin([
                 this.instrOption.code,
                 encodeInt(this.immediates[0]),
-                ...(this.ifOption.then ?? []).map(it => it.toBuffer(opt)),
+                ...(this.blockOption.then ?? []).map(it => it.toBuffer(opt)),
                 instructionSet["else"].code,
-                ...(this.ifOption.else ?? []).map(it => it.toBuffer(opt)),
+                ...(this.blockOption.else ?? []).map(it => it.toBuffer(opt)),
                 instructionSet["end"].code
             ]);
         } else {
             return combin([
                 this.instrOption.code,
                 encodeInt(this.immediates[0]),
-                ...(this.ifOption.then ?? []).map(it => it.toBuffer(opt)),
+                ...(this.blockOption.then ?? []).map(it => it.toBuffer(opt)),
                 instructionSet["end"].code
             ]);
         }
@@ -701,19 +802,57 @@ export class IfBlock extends BlockInstruction {
     getLables(): (string | undefined)[] {
         let res: (string | undefined)[] = [];
 
-        res.push(this.ifOption.label);
+        res.push(this.blockOption.label);
 
-        let thenBlockInstrs = (this.ifOption.then ?? []).filter(it => it instanceof BlockInstruction) as BlockInstruction[];
+        let thenBlockInstrs = (this.blockOption.then ?? []).filter(it => it instanceof BlockInstruction) as BlockInstruction[];
         for (let it of thenBlockInstrs) {
             res.push(...it.getLables());
         }
 
-        let elseBlockInstrs = (this.ifOption.then ?? []).filter(it => it instanceof BlockInstruction) as BlockInstruction[];
+        let elseBlockInstrs = (this.blockOption.then ?? []).filter(it => it instanceof BlockInstruction) as BlockInstruction[];
         for (let it of elseBlockInstrs) {
             res.push(...it.getLables());
         }
 
         return res;
+    }
+    toString(option: Required<FormatOption>): string {
+        let typeStr = this.getTypeString(this.blockOption.type);
+
+        let name = this.instrOption.name;
+        let label = this.blockOption.label;
+        let header = label ? `${name} $${label} ${typeStr}` : `${name} ${typeStr}`;
+
+        let thenContent = this.blockOption.then?.map(it => it.toString(option)) ?? [];
+        let elseContent = this.blockOption.else?.map(it => it.toString(option)) ?? [];
+
+        let res: string[];
+        if (elseContent.length) {
+            res = [
+                header,
+                addIndent(thenContent.join("\n"), " ", option.indent),
+                "else",
+                addIndent(elseContent.join("\n"), " ", option.indent),
+                "end"
+            ];
+        } else {
+            res = [
+                header,
+                addIndent(thenContent.join("\n"), " ", option.indent),
+                "end"
+            ];
+        }
+        return res.join("\n");
+    }
+    setImmediateIndexToName(env: Env, block: BlockProxy, func: Func) {
+        block = block.createSubBlock(this);
+
+        for (let code of this.blockOption.then ?? []) {
+            code.setImmediateIndexToName(env, block, func);
+        }
+        for (let code of this.blockOption.else ?? []) {
+            code.setImmediateIndexToName(env, block, func);
+        }
     }
 }
 
@@ -721,6 +860,24 @@ export class IfBlock extends BlockInstruction {
  * 块用于检查时候的代理
  */
 export class BlockProxy {
+    labelIndexToName(idx: Index): Index {
+        if (typeof idx === "string") {
+            return idx;
+        } else {
+            let block = this.getBlockByIndex(idx);
+            if (block?.instr instanceof BlockInstruction) {
+                return block.instr.label ?? idx;
+            } else {
+                return idx;
+            }
+        }
+    }
+
+    private getBlockByIndex(idx: U32, currentIndex = 0): BlockProxy | undefined {
+        if (idx === currentIndex) return this;
+        return this.parent?.getBlockByIndex(idx, currentIndex + 1);
+    }
+
     /**
      * 父级块的代理
      */
@@ -847,11 +1004,12 @@ export function bufferToInstr(buffer: ArrayBuffer, labelNames: NameMap[] = [], t
         offset.value += instrOpt.code.byteLength;
 
         let imms: any[] = [];
-        for (let immType of instrOpt.immediates) {
+        for (let immType of instrOpt.immediateTypes) {
             let fn = map[immType];
             let imm = fn(buffer, offset);
             imms.push(imm);
         }
+
         let instr = new Instruction(instrOpt, imms);
         instrs.push(instr);
     }

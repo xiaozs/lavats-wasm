@@ -317,77 +317,84 @@ export interface LimitOption {
     max?: U32;
 }
 
+export interface CommonImportOption {
+    /**
+     * 给导入项命名的名称
+     */
+    name?: string,
+    /**
+     * 导入的模块
+     */
+    module: string,
+    /**
+     * 模块中的名字
+     */
+    importName: string
+}
+
+export interface FunctionImportOption extends CommonImportOption {
+    /**
+     * 导入项的类型
+     */
+    type: ImportExportType.Function,
+    /**
+     * 导入的函数的入参类型
+     */
+    params?: Type[],
+    /**
+     * 导入的函数的结果类型
+     */
+    results?: Type[]
+}
+
+export interface TableImportOption extends CommonImportOption {
+    type: ImportExportType.Table,
+    /**
+     * 导入的表格的类型
+     */
+    elementType: ElementType,
+    /**
+     * 表格的最小大小
+     */
+    min: U32,
+    /**
+     * 表格的最大大小
+     */
+    max?: U32
+}
+
+export interface MemroyImportOption extends CommonImportOption {
+    type: ImportExportType.Memory,
+    /**
+     * 内存的最小大小（页）
+     */
+    min: U32,
+    /**
+     * 内存的最大大小（页）
+     */
+    max?: U32
+}
+
+export interface GlobalImportOption extends CommonImportOption {
+    type: ImportExportType.Global,
+    /**
+     * 全局变量类型
+     */
+    valueType: Type,
+    /**
+     * 是否可修改
+     */
+    mutable?: boolean
+}
+
 /**
  * 导入项
  */
 export type ImportOption =
-    {
-        /**
-         * 给导入项命名的名称
-         */
-        name?: string,
-        /**
-         * 导入的模块
-         */
-        module: string,
-        /**
-         * 模块中的名字
-         */
-        importName: string
-    } &
-    (
-        | {
-            /**
-             * 导入项的类型
-             */
-            type: ImportExportType.Function,
-            /**
-             * 导入的函数的入参类型
-             */
-            params?: Type[],
-            /**
-             * 导入的函数的结果类型
-             */
-            results?: Type[]
-        }
-        | {
-            type: ImportExportType.Table,
-            /**
-             * 导入的表格的类型
-             */
-            elementType: ElementType,
-            /**
-             * 表格的最小大小
-             */
-            min: U32,
-            /**
-             * 表格的最大大小
-             */
-            max?: U32
-        }
-        | {
-            type: ImportExportType.Memory,
-            /**
-             * 内存的最小大小（页）
-             */
-            min: U32,
-            /**
-             * 内存的最大大小（页）
-             */
-            max?: U32
-        }
-        | {
-            type: ImportExportType.Global,
-            /**
-             * 全局变量类型
-             */
-            valueType: Type,
-            /**
-             * 是否可修改
-             */
-            mutable?: boolean
-        }
-    );
+    | FunctionImportOption
+    | TableImportOption
+    | MemroyImportOption
+    | GlobalImportOption
 
 /**
  * 导出项
@@ -419,11 +426,11 @@ export interface TypeOption {
     /**
      * 签名的入参类型
      */
-    params: Type[];
+    params?: Type[];
     /**
      * 签名的结果类型
      */
-    results: Type[];
+    results?: Type[];
 }
 
 /**
@@ -562,11 +569,8 @@ export interface NormalInstructionOption {
     /**
      * 指令的立即数类型
      */
-    readonly immediates: readonly ImmediateType[];
-    /**
-     * 指令的立即数转换成二进制的方法
-     */
-    readonly immediatesToBuffer?: (option: ToBufferOption & { immediates: readonly any[] }) => ArrayBuffer;
+    readonly immediateTypes: readonly ImmediateType[];
+    readonly immediateIndexTypes?: IndexType[];
     /**
      * 指令的参数类型
      */
@@ -592,11 +596,8 @@ export interface SpecialInstructionOption {
     /**
      * 指令的立即数类型
      */
-    readonly immediates: readonly ImmediateType[];
-    /**
-     * 指令的立即数转换成二进制的方法
-     */
-    readonly immediatesToBuffer?: (option: ToBufferOption & { immediates: readonly any[] }) => ArrayBuffer;
+    readonly immediateTypes: readonly ImmediateType[];
+    readonly immediateIndexTypes?: IndexType[];
     /**
      * 指令的检查函数
      * @param option 检查配置项
@@ -672,4 +673,18 @@ export enum SectionType {
     ElementSection = 9,
     CodeSection = 10,
     DataSection = 11
+}
+
+export interface FormatOption {
+    indent?: number;
+}
+
+export enum IndexType {
+    Function,
+    Table,
+    Memory,
+    Global,
+    Type,
+    Label,
+    Local,
 }

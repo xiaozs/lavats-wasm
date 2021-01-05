@@ -36,8 +36,8 @@ export class InnerModule {
         if (!env.types.length) return;
         let functionTypes = env.types.map(it => {
             let type = new FunctionType();
-            type.params = it.params;
-            type.results = it.results;
+            type.params = it.params ?? [];
+            type.results = it.results ?? [];
             return type;
         })
         let res = new TypeSection();
@@ -278,8 +278,16 @@ export class InnerModule {
         return combin(res);
     }
     toModule(): Module {
-        let [customSec] = this.getCustomSections("name") as [CustomSection | undefined];
+        let [customSec] = this.getCustomSections("name") as [CustomSection?];
         let nameSec = customSec?.toNameSection();
+
+        let type = this.typeSection?.functionTypes.map((it, i) => {
+            return {
+                name: nameSec?.typeNameSubSection?.names.find(it => it.index === i)?.name,
+                params: it.params,
+                results: it.results,
+            }
+        });
 
         let imports = this.importSection?.imports.map(it => {
             let common = {
@@ -355,13 +363,6 @@ export class InnerModule {
                 functionIndexes: it.functionIndexes,
             }
         });
-        let type = this.typeSection?.functionTypes.map((it, i) => {
-            return {
-                name: nameSec?.typeNameSubSection?.names.find(it => it.index === i)?.name,
-                params: it.params,
-                results: it.results,
-            }
-        });
 
         let global = this.globalSection?.globals.map(it => {
             return {
@@ -425,19 +426,23 @@ export class InnerModule {
             }
         });
 
-        return new Module({
+        let module = new Module({
             name: nameSec?.moduleNameSubSection?.name,
-            memory,
-            data,
-            table,
-            element,
-            import: imports,
-            export: exports,
-            type,
-            global,
-            function: functions,
+            memory: memory ?? [],
+            data: data ?? [],
+            table: table ?? [],
+            element: element ?? [],
+            import: imports ?? [],
+            export: exports ?? [],
+            type: type ?? [],
+            global: global ?? [],
+            function: functions ?? [],
             start
         });
+
+        module.setImmediateIndexToName();
+
+        return module;
     }
     private setNamesOf(arr: { name?: string }[], subSection: NameMapSubSection | undefined) {
         for (let { index, name } of subSection?.names ?? []) {
@@ -691,7 +696,7 @@ export class NameSection {
         let [fn, importType] = map[type];
 
         let group: { name?: string }[] = [];
-        if (importType) {
+        if (importType !== undefined) {
             let imports = module.import.filter(it => it.type === importType);
             group = imports;
         }

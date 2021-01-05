@@ -1,6 +1,7 @@
 import { Env } from './Env';
-import { ImportExportType, isF32, isF64, isI32, isI64, isU32, LimitOption, ModuleOption, Type, U32 } from './Type';
+import { FormatOption, ImportExportType, isF32, isF64, isI32, isI64, isU32, LimitOption, ModuleOption, Type, U32 } from './Type';
 import { InnerModule } from "./InnerModule";
+import { addIndent, typesToString } from './utils';
 
 /**
  * 获取模块默认配置的函数
@@ -200,8 +201,11 @@ export class Module {
     private checkStart(env: Env) {
         let { start } = this.option;
         if (start === undefined) return;
-        let obj = env.findFunction(start);
-        if (!obj) throw new Error(`start: 没找到func ${start}`)
+        let func = env.findFunction(start);
+        if (!func) throw new Error(`start: 没找到func ${start}`)
+
+        if (func.params?.length) throw new Error(`start: func ${start} 不能有入参`);
+        if (func.results?.length) throw new Error(`start: func ${start} 不能有返回值`);
     }
 
     /**
@@ -251,6 +255,238 @@ export class Module {
     }
     static fromBuffer(buffer: ArrayBuffer) {
         return InnerModule.fromBuffer(buffer);
+    }
+
+    toString(opt?: FormatOption) {
+        this.check();
+        let defaultOpt: Required<FormatOption> = {
+            indent: 4
+        };
+
+        let option: Required<FormatOption> = {
+            ...defaultOpt,
+            ...opt
+        }
+
+        return [
+            this.name ? `(module $${this.name}` : `(module`,
+            addIndent([
+                this.importToString(),
+                this.typeToString(),
+                this.globalToString(),
+                this.memoryToString(),
+                this.dataToString(),
+                this.tableToString(),
+                this.elementToString(),
+                this.functionToString(option),
+                this.startToString(),
+                this.exportToString(),
+            ].join("\n"), " ", option.indent),
+            ")"
+        ].join("\n");
+    }
+
+    private typeToString(): string {
+        let res: string[] = [];
+        for (let type of this.type) {
+            let name = type.name;
+            let content = [
+                name ? `(type $${name}` : `(type`,
+                "(func",
+                type.params?.length ? `(param ${typesToString(type.params)})` : "",
+                type.results?.length ? `(result ${typesToString(type.results)})` : "",
+                ")",
+                ")"
+            ].join(" ");
+            res.push(content);
+        }
+        return res.join("\n");
+    }
+
+    private globalToString(): string {
+        let res: string[] = [];
+        for (let global of this.global) {
+            let name = global.name;
+            let type = typesToString([global.valueType]);
+            let content = [
+                name ? `(global $${name}` : `(global`,
+                global.mutable ? `(mut ${type})` : type,
+                `(${type}.const ${global.init})`,
+                ")"
+            ].join(" ");
+            res.push(content);
+        }
+        return res.join("\n");
+    }
+
+    private importToString(): string {
+        let res: string[] = [];
+        for (let imp of this.import) {
+            let name = imp.name;
+            let module = imp.module.replace(/"/g, "\\\"");
+            let importName = imp.importName.replace(/"/g, "\\\"");
+            let content: string;
+            switch (imp.type) {
+                case ImportExportType.Function: {
+                    content = [
+                        name ? `(func $${name}` : `(func`,
+                        imp.params?.length ? `(param ${typesToString(imp.params)})` : "",
+                        imp.results?.length ? `(result ${typesToString(imp.results)})` : "",
+                        ")"
+                    ].join(" ");
+                    break;
+                }
+                case ImportExportType.Table: {
+                    content = [
+                        name ? `(table $${name}` : `(table`,
+                        imp.min,
+                        imp.max ?? "",
+                        "anyfunc",
+                        ")"
+                    ].join(" ");
+                    break;
+                }
+                case ImportExportType.Memory: {
+                    content = [
+                        name ? `(memory $${name}` : `(memory`,
+                        imp.min,
+                        imp.max ?? "",
+                        ")"
+                    ].join(" ");
+                    break;
+                }
+                case ImportExportType.Global: {
+                    let type = typesToString([imp.valueType]);
+                    content = [
+                        name ? `(global $${name}` : `(global`,
+                        imp.mutable ? `(mut ${type})` : type
+                    ].join(" ");
+                    break;
+                }
+            }
+
+            let str = `(import "${module}" "${importName}" ${content})`
+            res.push(str);
+        }
+        return res.join("\n");
+    }
+    private memoryToString(): string {
+        let res: string[] = [];
+        for (let mem of this.memory) {
+            let name = mem.name;
+            let content = [
+                name ? `(memory $${name}` : `(memory`,
+                mem.min,
+                mem.max ?? "",
+                ")"
+            ].join(" ");
+            res.push(content);
+        }
+        return res.join("\n");
+    }
+    private bufferToString(buffer: ArrayBuffer): string {
+        let td = new TextDecoder();
+        return td.decode(buffer).replace(/\W/g, $$ => {
+            let txt = $$.charCodeAt(0).toString(16);
+            return txt.length < 2 ? `\\0${txt}` : `\\${txt}`;
+        })
+    }
+    private dataToString(): string {
+        let res: string[] = [];
+        for (let data of this.data) {
+            let name = data.name;
+            let txt = this.bufferToString(data.init);
+            let content = [
+                name ? `(data $${name}` : `(data`,
+                typeof data.memoryIndex === "string" ? `(memory $${data.memoryIndex})` :
+                    data.memoryIndex !== 0 ? `(memory ${data.memoryIndex})` : "",
+                `(i32.const ${data.offset})`,
+                // todo
+                txt.length ? `"${txt}"` : "",
+                ")"
+            ].join(" ");
+            res.push(content);
+        }
+        return res.join("\n");
+    }
+    private tableToString(): string {
+        let res: string[] = [];
+        for (let table of this.table) {
+            let name = table.name;
+            let content = [
+                name ? `(table $${name}` : `(table`,
+                table.min,
+                table.max ?? "",
+                "anyfunc",
+                ")"
+            ].join(" ");
+            res.push(content);
+        }
+        return res.join("\n");
+    }
+    private elementToString(): string {
+        let res: string[] = [];
+        for (let elem of this.element) {
+            let name = elem.name;
+            let content = [
+                name ? `(elem $${name}` : `(elem`,
+                typeof elem.tableIndex === "string" ? `(table $${elem.tableIndex})` :
+                    elem.tableIndex !== 0 ? `(table ${elem.tableIndex})` : "",
+                `(i32.const ${elem.offset})`,
+                elem.functionIndexes.map(it => typeof it === "string" ? `$${it}` : it).join(" "),
+                ")"
+            ].join(" ");
+            res.push(content);
+        }
+        return res.join("\n");
+    }
+
+    private functionToString(option: Required<FormatOption>): string {
+        let res: string[] = [];
+        for (let func of this.function) {
+            let content = func.toString(option);
+            res.push(content);
+        }
+        return res.join("\n");
+    }
+
+    private startToString() {
+        if (this.start !== undefined) {
+            if (typeof this.start === "string") {
+                let name = this.start;
+                return `(start $${name})`;
+            } else {
+                return `(start ${this.start})`;
+            }
+        } else {
+            return "";
+        }
+    }
+
+    private exportToString(): string {
+        let res: string[] = [];
+        for (let exp of this.export) {
+            let name = exp.exportName.replace(/"/g, "\\\"");
+            let indexStr = typeof exp.index === "string" ? `$${exp.index}` : exp.index;
+
+            let content: string;
+            switch (exp.type) {
+                case ImportExportType.Function: content = `(func ${indexStr})`; break;
+                case ImportExportType.Table: content = `(table ${indexStr})`; break;
+                case ImportExportType.Memory: content = `(memory ${indexStr})`; break;
+                case ImportExportType.Global: content = `(global ${indexStr})`; break;
+            }
+            let str = `(export "${name}" ${content})`;
+            res.push(str);
+        }
+        return res.join("\n");
+    }
+
+    setImmediateIndexToName() {
+        let env = new Env(this);
+        for (let func of this.function) {
+            func.setImmediateIndexToName(env);
+        }
     }
 }
 

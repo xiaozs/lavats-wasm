@@ -84,6 +84,14 @@ class InitData {
         }
         return combin(buffers);
     }
+    buffer(val: ArrayBuffer) {
+        this.datas.push({ type: DataType.Buffer, val });
+        return this;
+    }
+    string(val: string) {
+        this.datas.push({ type: DataType.String, val });
+        return this;
+    }
 }
 
 export namespace data {
