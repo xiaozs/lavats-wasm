@@ -1,5 +1,5 @@
+import { combin } from './encode';
 import { F32, F64, I16, I32, I64, I8, isF32, isF64, isI16, isI32, isI64, isI8, isV128, V128 } from './Type';
-import { combin } from './utils';
 
 let te = new TextEncoder();
 

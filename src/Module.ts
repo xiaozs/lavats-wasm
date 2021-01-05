@@ -243,8 +243,8 @@ export class Module {
             if (!memory) throw new Error(`data ${i}: 没找到memory ${it.memoryIndex}`);
         }
     }
-    toBuffer(check = true) {
-        check && this.check();
+    toBuffer() {
+        this.check();
         let env = new Env(this.option);
         let inner = InnerModule.fromModule(this, env);
         return inner.toBuffer();

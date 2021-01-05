@@ -2,7 +2,7 @@ import { BlockProxy, BlockInstruction, instructionSet } from './Instruction';
 import { Stack } from "./Stack";
 import { FunctionOption, Index, ToBufferOption, Type, TypeOption, U32 } from './Type';
 import { Env } from "./Env";
-import { combin } from './utils';
+import { combin } from './encode';
 
 export interface LocalGroup {
     type: Type;

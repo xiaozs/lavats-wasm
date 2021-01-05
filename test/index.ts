@@ -47,19 +47,18 @@ let m = new Module({
                         Code.i32.Const(50)
                     ]
                 }),
-                Code.drop
-                // Code.i32.Const(10),
-                // Code.If({
-                //     label: "if",
-                //     type: "ifBlock",
-                //     then: [
-                //         Code.drop,
-                //         Code.Return
-                //     ],
-                //     else: [
-                //         Code.drop
-                //     ]
-                // })
+                Code.i32.Const(10),
+                Code.If({
+                    label: "if",
+                    type: "ifBlock",
+                    then: [
+                        Code.drop,
+                        Code.Return
+                    ],
+                    else: [
+                        Code.drop
+                    ]
+                })
             ]
         })
     ]
@@ -69,6 +68,7 @@ let mBuf = m.toBuffer();
 // let buffer = readFileSync("./test/test.wasm");
 // let buffer = writeFileSync("./test/test2.wasm", new Uint8Array(mBuf));
 let test = InnerModule.fromBuffer(mBuf);
+let nm = test.toModule();
 let [customSec] = test.getCustomSections("name");
 let nameSec = customSec?.toNameSection();
 let buf = nameSec.toBuffer();

@@ -1,8 +1,9 @@
+import { Offset, decodeUint, decodeF32, decodeF64, decodeSint, decodeArray, encodeInt, combin, encodeArray, encodeF32, encodeF64 } from './encode';
 import type { Env } from "./Env";
 import type { Func } from "./Func";
+import type { NameMap } from './Section';
 import { Stack } from './Stack';
 import { BlockOption, BlockType, CheckOption, IfOption, ImmediateType, Index, InstructionOption, NormalInstructionOption, SpecialInstructionOption, ToBufferOption, Type, TypeOption } from './Type';
-import { combin, encodeArray, encodeF32, encodeF64, encodeInt } from './utils';
 
 type InstrsOption = (Omit<NormalInstructionOption, "code"> | Omit<SpecialInstructionOption, "code">) & { code: number[] };
 
@@ -809,4 +810,96 @@ export class BlockProxy {
             return false;
         }
     }
+}
+
+function isStartWith(buffer: Uint8Array, offset: Offset, otherBuffer: ArrayBuffer) {
+    let ob = new Uint8Array(otherBuffer);
+    for (let i = 0; i < ob.length; i++) {
+        if (buffer[offset.value + i] !== ob[i]) return false;
+    }
+    return true;
+}
+
+let map = {
+    [ImmediateType.I32]: decodeUint,
+    [ImmediateType.I64]: decodeUint,
+    [ImmediateType.F32]: decodeF32,
+    [ImmediateType.F64]: decodeF64,
+    [ImmediateType.V128]: () => { throw new Error("todo") },
+    [ImmediateType.BlockType]: decodeSint,
+    [ImmediateType.IndexArray]: (buffer: ArrayBuffer, offset: Offset) => decodeArray(buffer, offset, decodeUint),
+    [ImmediateType.Index]: decodeUint,
+}
+
+let blockMap: Record<string, new (opt: any) => BlockInstruction> = {
+    "block": Block,
+    "loop": LoopBlock,
+    "if": IfBlock,
+}
+
+export function bufferToInstr(buffer: ArrayBuffer, labelNames: NameMap[] = [], typeOptions: TypeOption[] = []): Instruction[] {
+    let view = new Uint8Array(buffer);
+    let instrs: Instruction[] = [];
+    let offset = { value: 0 };
+    while (offset.value < view.byteLength) {
+        let instrOpt = instructions.find(it => isStartWith(view, offset, it.code));
+        if (!instrOpt) throw new Error(`未知指令 0x${offset.value.toString(16)}: 0x${view[offset.value].toString(16)} 0x${view[offset.value].toString(16)}`);
+        offset.value += instrOpt.code.byteLength;
+
+        let imms: any[] = [];
+        for (let immType of instrOpt.immediates) {
+            let fn = map[immType];
+            let imm = fn(buffer, offset);
+            imms.push(imm);
+        }
+        let instr = new Instruction(instrOpt, imms);
+        instrs.push(instr);
+    }
+
+    let stack: { block?: Instruction, blockIndex?: number, codes: Instruction[] }[] = [{ codes: [] }];
+
+    let blockIndex = 0;
+    for (let instr of instrs) {
+        let isBlock = ["block", "loop", "if"].includes(instr.name);
+        let isEnd = instr.name === "end";
+
+        if (isBlock) {
+            stack.push({ block: instr, blockIndex: blockIndex++, codes: [] });
+        } else if (isEnd) {
+            let { block, blockIndex, codes } = stack.pop()!;
+            if (!block) return codes;
+
+            let label = labelNames.find(it => it.index === blockIndex)?.name;
+
+            let blockType = block.immediates[0];
+            let type = typeOptions[blockType]?.name ?? blockType;
+
+            let fn = blockMap[block.name];
+            let instr: BlockInstruction;
+            if (block.name === "if") {
+                let elseIndex = codes.findIndex(it => it.name === "else");
+                let thenCodes: Instruction[];
+                let elseCodes: Instruction[];
+
+                if (elseIndex === -1) {
+                    thenCodes = codes;
+                    elseCodes = [];
+                } else {
+                    thenCodes = codes.slice(0, elseIndex);
+                    elseCodes = codes.slice(elseIndex + 1);
+                }
+
+                instr = new IfBlock({ label, type, then: thenCodes, else: elseCodes });
+            } else {
+                instr = new fn({ label, type, codes });
+            }
+            let top = stack[stack.length - 1];
+            top.codes.push(instr);
+        } else {
+            let top = stack[stack.length - 1];
+            top.codes.push(instr);
+        }
+    }
+
+    throw new Error("库代码有误");
 }

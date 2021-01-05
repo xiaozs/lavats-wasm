@@ -1,10 +1,10 @@
-import { decodeUint, decodeObject, Offset, encodeObject } from './encode';
+import { decodeUint, decodeObject, Offset, encodeObject, combin } from './encode';
 import { Module } from './Module';
 import { ElementType, FunctionOption, GlobalOption, ImportExportType, ImportOption, MemoryOption, NameType, SectionType, TableOption, Type, TypeOption } from './Type';
 import { CodeSection, CustomSection, DataNameSubSection, DataSection, ElementNameSubSection, ElementSection, Export, ExportSection, FunctionExportDesc, FunctionImportDesc, FunctionNameSubSection, FunctionSection, FunctionType, Global, GlobalExportDesc, GlobalImportDesc, GlobalNameSubSection, GlobalSection, Import, ImportDesc, ImportSection, InitedGlobal, LabelNameSubSection, LocalNameSubSection, Memory, MemoryExportDesc, MemoryImportDesc, MemoryNameSubSection, MemorySection, ModuleNameSubSection, NameSubSection, Section, StartSection, Table, TableExportDesc, TableImportDesc, TableNameSubSection, TableSection, TypeNameSubSection, TypeSection, Element, Code, Local, Data, NameMap, IndirectNameAssociation, IndirectNameMap, NameMapSubSection } from './Section';
 import { Env } from './Env';
-import { bufferToInstr, combin } from './utils';
 import { Func } from './Func';
+import { bufferToInstr } from './Instruction';
 
 /**
  * 内用模块
@@ -790,7 +790,10 @@ export let subSectionMap = {
 
     let props: any = {};
     for (let key of keys) {
-        let Key = key.replace(/^\w/, $$ => $$.toUpperCase()) as any;
+        let Key: any = key
+            .replace(/^\w/, $$ => $$.toUpperCase())
+            .replace("NameSubSection", "");
+
         let value = NameType[Key] as any;
         props[key] = {
             get() {
