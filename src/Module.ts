@@ -1,7 +1,7 @@
 import { Env } from './Env';
 import { FormatOption, ImportExportType, isF32, isF64, isI32, isI64, isU32, LimitOption, ModuleOption, Type, U32 } from './Type';
 import { InnerModule } from "./InnerModule";
-import { addIndent, typesToString } from './utils';
+import { expandItem, flatItem, typeToString, itemName, ImportExportName, bufferToString } from './utils';
 
 /**
  * 获取模块默认配置的函数
@@ -260,7 +260,8 @@ export class Module {
     toString(opt?: FormatOption) {
         this.check();
         let defaultOpt: Required<FormatOption> = {
-            indent: 4
+            indent: 4,
+            indentChar: " ",
         };
 
         let option: Required<FormatOption> = {
@@ -268,218 +269,137 @@ export class Module {
             ...opt
         }
 
-        return [
-            this.name ? `(module $${this.name}` : `(module`,
-            addIndent([
-                this.importToString(),
-                this.typeToString(),
-                this.globalToString(),
-                this.memoryToString(),
-                this.dataToString(),
-                this.tableToString(),
-                this.elementToString(),
-                this.functionToString(option),
+        return expandItem({
+            option,
+            header: ["module", itemName(this.name)],
+            body: [
+                ...this.typeToString(),
+                ...this.importToString(),
+                ...this.globalToString(),
+                ...this.memoryToString(),
+                ...this.dataToString(),
+                ...this.tableToString(),
+                ...this.elementToString(),
+                ...this.functionToString(option),
                 this.startToString(),
-                this.exportToString(),
-            ].join("\n"), " ", option.indent),
-            ")"
-        ].join("\n");
+                ...this.exportToString(),
+            ]
+        })
     }
 
-    private typeToString(): string {
-        let res: string[] = [];
-        for (let type of this.type) {
-            let name = type.name;
-            let content = [
-                name ? `(type $${name}` : `(type`,
-                "(func",
-                type.params?.length ? `(param ${typesToString(type.params)})` : "",
-                type.results?.length ? `(result ${typesToString(type.results)})` : "",
-                ")",
-                ")"
-            ].join(" ");
-            res.push(content);
-        }
-        return res.join("\n");
+    private typeToString(): string[] {
+        return this.type.map(it => {
+            let params = it.params?.length ? flatItem("param", ...it.params.map(it => typeToString(it))) : "";
+            let results = it.results?.length ? flatItem("result", ...it.results.map(it => typeToString(it))) : "";
+            let func = flatItem("func", params, results);
+            return flatItem("type", itemName(it.name), func);
+        })
     }
 
-    private globalToString(): string {
-        let res: string[] = [];
-        for (let global of this.global) {
-            let name = global.name;
-            let type = typesToString([global.valueType]);
-            let content = [
-                name ? `(global $${name}` : `(global`,
-                global.mutable ? `(mut ${type})` : type,
-                `(${type}.const ${global.init})`,
-                ")"
-            ].join(" ");
-            res.push(content);
-        }
-        return res.join("\n");
+    private globalToString(): string[] {
+        return this.global.map(it => {
+            let type = typeToString(it.valueType);
+            let t = it.mutable ? `(mut ${type})` : type;
+            let init = `(${type}.const ${it.init})`;
+            return flatItem("global", itemName(it.name), t, init);
+        });
     }
 
-    private importToString(): string {
-        let res: string[] = [];
-        for (let imp of this.import) {
-            let name = imp.name;
-            let module = imp.module.replace(/"/g, "\\\"");
-            let importName = imp.importName.replace(/"/g, "\\\"");
+    private importToString(): string[] {
+        return this.import.map(it => {
             let content: string;
-            switch (imp.type) {
+            switch (it.type) {
                 case ImportExportType.Function: {
-                    content = [
-                        name ? `(func $${name}` : `(func`,
-                        imp.params?.length ? `(param ${typesToString(imp.params)})` : "",
-                        imp.results?.length ? `(result ${typesToString(imp.results)})` : "",
-                        ")"
-                    ].join(" ");
+                    let params = it.params?.length ? flatItem("param", ...it.params.map(it => typeToString(it))) : "";
+                    let results = it.results?.length ? flatItem("result", ...it.results.map(it => typeToString(it))) : "";
+                    content = flatItem("func", itemName(it.name), params, results);
                     break;
                 }
                 case ImportExportType.Table: {
-                    content = [
-                        name ? `(table $${name}` : `(table`,
-                        imp.min,
-                        imp.max ?? "",
-                        "anyfunc",
-                        ")"
-                    ].join(" ");
+                    content = flatItem("table", itemName(it.name), it.min, it.max, "anyfunc");
                     break;
                 }
                 case ImportExportType.Memory: {
-                    content = [
-                        name ? `(memory $${name}` : `(memory`,
-                        imp.min,
-                        imp.max ?? "",
-                        ")"
-                    ].join(" ");
+                    content = flatItem("memory", itemName(it.name), it.min, it.max);
                     break;
                 }
                 case ImportExportType.Global: {
-                    let type = typesToString([imp.valueType]);
-                    content = [
-                        name ? `(global $${name}` : `(global`,
-                        imp.mutable ? `(mut ${type})` : type
-                    ].join(" ");
+                    let type = typeToString(it.valueType);
+                    let t = it.mutable ? `(mut ${type})` : type;
+                    content = flatItem("global", itemName(it.name), t);
                     break;
                 }
             }
-
-            let str = `(import "${module}" "${importName}" ${content})`
-            res.push(str);
-        }
-        return res.join("\n");
-    }
-    private memoryToString(): string {
-        let res: string[] = [];
-        for (let mem of this.memory) {
-            let name = mem.name;
-            let content = [
-                name ? `(memory $${name}` : `(memory`,
-                mem.min,
-                mem.max ?? "",
-                ")"
-            ].join(" ");
-            res.push(content);
-        }
-        return res.join("\n");
-    }
-    private bufferToString(buffer: ArrayBuffer): string {
-        let td = new TextDecoder();
-        return td.decode(buffer).replace(/\W/g, $$ => {
-            let txt = $$.charCodeAt(0).toString(16);
-            return txt.length < 2 ? `\\0${txt}` : `\\${txt}`;
+            return flatItem("import", ImportExportName(it.module), ImportExportName(it.importName), content);
         })
     }
-    private dataToString(): string {
-        let res: string[] = [];
-        for (let data of this.data) {
-            let name = data.name;
-            let txt = this.bufferToString(data.init);
-            let content = [
-                name ? `(data $${name}` : `(data`,
-                typeof data.memoryIndex === "string" ? `(memory $${data.memoryIndex})` :
-                    data.memoryIndex !== 0 ? `(memory ${data.memoryIndex})` : "",
-                `(i32.const ${data.offset})`,
-                // todo
-                txt.length ? `"${txt}"` : "",
-                ")"
-            ].join(" ");
-            res.push(content);
-        }
-        return res.join("\n");
+    private memoryToString(): string[] {
+        return this.memory.map(it => flatItem("memory", itemName(it.name), it.min, it.max));
     }
-    private tableToString(): string {
-        let res: string[] = [];
-        for (let table of this.table) {
-            let name = table.name;
-            let content = [
-                name ? `(table $${name}` : `(table`,
-                table.min,
-                table.max ?? "",
-                "anyfunc",
-                ")"
-            ].join(" ");
-            res.push(content);
-        }
-        return res.join("\n");
+    private dataToString(): string[] {
+        return this.data.map(it => {
+            let memory: string;
+            if (typeof it.memoryIndex === "object") {
+                memory = flatItem("memory", itemName(it.memoryIndex));
+            } else if (it.memoryIndex === 0) {
+                memory = "";
+            } else {
+                memory = flatItem("memory", it.memoryIndex);
+            }
+
+            let offset = flatItem("i32.const", it.offset);
+            let init = bufferToString(it.init);
+            return flatItem("data", itemName(it.name), memory, offset, init);
+        })
     }
-    private elementToString(): string {
-        let res: string[] = [];
-        for (let elem of this.element) {
-            let name = elem.name;
-            let content = [
-                name ? `(elem $${name}` : `(elem`,
-                typeof elem.tableIndex === "string" ? `(table $${elem.tableIndex})` :
-                    elem.tableIndex !== 0 ? `(table ${elem.tableIndex})` : "",
-                `(i32.const ${elem.offset})`,
-                elem.functionIndexes.map(it => typeof it === "string" ? `$${it}` : it).join(" "),
-                ")"
-            ].join(" ");
-            res.push(content);
-        }
-        return res.join("\n");
+    private tableToString(): string[] {
+        return this.table.map(it => flatItem("table", itemName(it.name), it.min, it.max, "anyfunc"));
+    }
+    private elementToString(): string[] {
+        return this.element.map(it => {
+            let table: string;
+            if (typeof it.tableIndex === "object") {
+                table = flatItem("table", itemName(it.tableIndex));
+            } else if (it.tableIndex === 0) {
+                table = "";
+            } else {
+                table = flatItem("table", it.tableIndex);
+            }
+
+            let offset = flatItem("i32.const", it.offset);
+            let indexes = it.functionIndexes.map(it => typeof it === "string" ? itemName(it) : it);
+            return flatItem("elem", itemName(it.name), table, offset, ...indexes);
+        });
     }
 
-    private functionToString(option: Required<FormatOption>): string {
-        let res: string[] = [];
-        for (let func of this.function) {
-            let content = func.toString(option);
-            res.push(content);
-        }
-        return res.join("\n");
+    private functionToString(option: Required<FormatOption>): string[] {
+        return this.function.map(it => it.toString(option));
     }
 
     private startToString() {
-        if (this.start !== undefined) {
-            if (typeof this.start === "string") {
-                let name = this.start;
-                return `(start $${name})`;
-            } else {
-                return `(start ${this.start})`;
-            }
-        } else {
+        let start = this.start;
+        if (start === undefined) {
             return "";
+        } else if (typeof start === "string") {
+            return flatItem("start", itemName(start));
+        } else {
+            return flatItem("start", start);
         }
     }
 
-    private exportToString(): string {
-        let res: string[] = [];
-        for (let exp of this.export) {
-            let name = exp.exportName.replace(/"/g, "\\\"");
-            let indexStr = typeof exp.index === "string" ? `$${exp.index}` : exp.index;
-
-            let content: string;
-            switch (exp.type) {
-                case ImportExportType.Function: content = `(func ${indexStr})`; break;
-                case ImportExportType.Table: content = `(table ${indexStr})`; break;
-                case ImportExportType.Memory: content = `(memory ${indexStr})`; break;
-                case ImportExportType.Global: content = `(global ${indexStr})`; break;
-            }
-            let str = `(export "${name}" ${content})`;
-            res.push(str);
+    private exportToString(): string[] {
+        let map = {
+            [ImportExportType.Function]: "func",
+            [ImportExportType.Table]: "table",
+            [ImportExportType.Memory]: "memory",
+            [ImportExportType.Global]: "global"
         }
-        return res.join("\n");
+        return this.export.map(it => {
+            let type = map[it.type];
+            let index = typeof it.index === "string" ? itemName(it.index) : it.index;
+            let content = flatItem(type, index);
+            return flatItem("export", ImportExportName(it.exportName), content);
+        })
     }
 
     setImmediateIndexToName() {

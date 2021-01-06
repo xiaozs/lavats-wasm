@@ -161,25 +161,25 @@ export class InnerModule {
             switch (it.type) {
                 case ImportExportType.Function: {
                     let desc = new FunctionExportDesc();
-                    desc.functionIndex = env.findFunctionIndex(it.index)!;
+                    desc.index = env.findFunctionIndex(it.index)!;
                     exp.desc = desc;
                     return exp;
                 }
                 case ImportExportType.Global: {
                     let desc = new GlobalExportDesc();
-                    desc.globalIndex = env.findGlobalIndex(it.index)!;
+                    desc.index = env.findGlobalIndex(it.index)!;
                     exp.desc = desc;
                     return exp;
                 }
                 case ImportExportType.Memory: {
                     let desc = new MemoryExportDesc();
-                    desc.memoryIndex = env.findMemoryIndex(it.index)!;
+                    desc.index = env.findMemoryIndex(it.index)!;
                     exp.desc = desc;
                     return exp;
                 }
                 case ImportExportType.Table: {
                     let desc = new TableExportDesc();
-                    desc.tableIndex = env.findTableIndex(it.index)!;
+                    desc.index = env.findTableIndex(it.index)!;
                     exp.desc = desc;
                     return exp;
                 }
@@ -281,96 +281,14 @@ export class InnerModule {
         let [customSec] = this.getCustomSections("name") as [CustomSection?];
         let nameSec = customSec?.toNameSection();
 
-        let type = this.typeSection?.functionTypes.map((it, i) => {
-            return {
-                name: nameSec?.typeNameSubSection?.names.find(it => it.index === i)?.name,
-                params: it.params,
-                results: it.results,
-            }
-        });
+        let type = this.typeSection?.getTypes(nameSec);
+        let imports = this.importSection?.getImportOptions(type ?? []);
+        let memory = this.memorySection?.getMemoryOptions();
+        let data = this.dataSection?.getDataOptions(nameSec);
+        let table = this.tableSection?.getTableOptions();
+        let element = this.elementSection?.getElementOptions(nameSec);
 
-        let imports = this.importSection?.imports.map(it => {
-            let common = {
-                module: it.module,
-                importName: it.name,
-                type: it.desc.type,
-            };
-
-            switch (it.desc.type) {
-                case ImportExportType.Function: {
-                    let desc = it.desc as FunctionImportDesc;
-                    let t = type![desc.typeIndex];
-                    return {
-                        ...common,
-                        params: t.params,
-                        results: t.results,
-                    }
-                }
-                case ImportExportType.Table: {
-                    let desc = it.desc as TableImportDesc;
-                    return {
-                        ...common,
-                        elementType: desc.table.elementType,
-                        min: desc.table.min,
-                        max: desc.table.max,
-                    }
-                }
-                case ImportExportType.Memory: {
-                    let desc = it.desc as MemoryImportDesc;
-                    return {
-                        ...common,
-                        min: desc.memory.min,
-                        max: desc.memory.max,
-                    }
-                }
-                case ImportExportType.Global: {
-                    let desc = it.desc as GlobalImportDesc;
-                    return {
-                        ...common,
-                        valueType: desc.global.valueType,
-                        mutable: desc.global.mutable,
-                    }
-                }
-            }
-        }) as (ImportOption[] | undefined);
-
-        let memory = this.memorySection?.memories.map(it => {
-            return {
-                min: it.min,
-                max: it.max,
-            }
-        }) as (MemoryOption[] | undefined);
-        let data = this.dataSection?.datas.map((it, i) => {
-            return {
-                name: nameSec?.dataNameSubSection?.names.find(it => it.index === i)?.name,
-                memoryIndex: it.memoryIndex,
-                offset: it.offset,
-                init: it.init,
-            }
-        });
-        let table = this.tableSection?.tables.map(it => {
-            return {
-                elementType: it.elementType,
-                min: it.min,
-                max: it.max,
-            }
-        }) as (TableOption[] | undefined);
-        let element = this.elementSection?.elements.map((it, i) => {
-            return {
-                name: nameSec?.elementNameSubSection?.names.find(it => it.index === i)?.name,
-                tableIndex: it.tableIndex,
-                offset: it.offset,
-                functionIndexes: it.functionIndexes,
-            }
-        });
-
-        let global = this.globalSection?.globals.map(it => {
-            return {
-                valueType: it.valueType,
-                mutable: it.mutable,
-                init: it.init
-            }
-        }) as (GlobalOption[] | undefined);
+        let global = this.globalSection?.getGlobalOptions();
         let functions = this.getFunctions(nameSec, type);
 
         let allFunctions = [...imports?.filter(it => it.type === ImportExportType.Function) ?? [], ...functions ?? []];
@@ -386,44 +304,11 @@ export class InnerModule {
         let startIndex = this.startSection?.functionIndex;
         let start = startIndex !== undefined ? allFunctions[startIndex].name : startIndex;
 
-        let exports = this.exportSection?.exports.map(it => {
-            let common = {
-                exportName: it.name
-            }
-            switch (it.desc.type) {
-                case ImportExportType.Function: {
-                    let desc = it.desc as FunctionExportDesc;
-                    return {
-                        ...common,
-                        type: desc.type,
-                        index: allFunctions[desc.functionIndex].name ?? desc.functionIndex
-                    }
-                }
-                case ImportExportType.Table: {
-                    let desc = it.desc as TableExportDesc;
-                    return {
-                        ...common,
-                        type: desc.type,
-                        index: allTables[desc.tableIndex].name ?? desc.tableIndex
-                    }
-                }
-                case ImportExportType.Memory: {
-                    let desc = it.desc as MemoryExportDesc;
-                    return {
-                        ...common,
-                        type: desc.type,
-                        index: allMemories[desc.memoryIndex].name ?? desc.memoryIndex
-                    }
-                }
-                case ImportExportType.Global: {
-                    let desc = it.desc as GlobalExportDesc;
-                    return {
-                        ...common,
-                        type: desc.type,
-                        index: allGlobals[desc.globalIndex].name ?? desc.globalIndex
-                    }
-                }
-            }
+        let exports = this.exportSection?.getExportOptions({
+            functions: allFunctions,
+            tables: allTables,
+            memories: allMemories,
+            globals: allGlobals,
         });
 
         let module = new Module({

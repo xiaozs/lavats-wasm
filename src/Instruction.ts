@@ -1,10 +1,10 @@
-import { Offset, decodeUint, decodeF32, decodeF64, decodeSint, decodeArray, encodeInt, combin, encodeArray, encodeF32, encodeF64 } from './encode';
+import { combin, decodeArray, decodeF32, decodeF64, decodeSint, decodeUint, encodeArray, encodeF32, encodeF64, encodeInt, Offset } from './encode';
 import type { Env } from "./Env";
 import type { Func } from "./Func";
 import type { NameMap } from './Section';
 import { Stack } from './Stack';
 import { BlockOption, BlockType, CheckOption, FormatOption, IfOption, ImmediateType, Index, IndexType, InstructionOption, NormalInstructionOption, SpecialInstructionOption, ToBufferOption, Type, TypeOption, U32 } from './Type';
-import { addIndent } from './utils';
+import { expandInstr, flatInstr, itemName } from './utils';
 
 type InstrsOption = (Omit<NormalInstructionOption, "code"> | Omit<SpecialInstructionOption, "code">) & { code: number[] };
 
@@ -545,7 +545,7 @@ export class Instruction {
                     throw new Error("库代码有误");
             }
         }
-        return `${this.instrOption.name} ${imms.join(" ")}`;
+        return flatInstr(this.instrOption.name, ...imms);
     }
     setImmediateIndexToName(env: Env, block: BlockProxy, func: Func) {
         let indexTypes = this.instrOption.immediateIndexTypes;
@@ -713,16 +713,16 @@ export abstract class NormalBlockInstruction extends BlockInstruction {
         return res;
     }
     toString(option: Required<FormatOption>): string {
-        let content = this.blockOption.codes?.map(it => it.toString(option)) ?? [];
-
-        let typeStr = this.getTypeString(this.blockOption.type);
-
-        let res: string[] = [
-            this.blockOption.label ? `${this.instrOption.name} $${this.blockOption.label} ${typeStr}` : `${this.instrOption.name} ${typeStr}`,
-            addIndent(content.join("\n"), " ", option.indent),
-            "end"
-        ];
-        return res.join("\n");
+        return expandInstr({
+            option,
+            header: [
+                this.instrOption.name,
+                itemName(this.blockOption.label),
+                this.getTypeString(this.blockOption.type),
+            ],
+            body: this.blockOption.codes?.map(it => it.toString(option)) ?? [],
+            end: "end"
+        })
     }
     setImmediateIndexToName(env: Env, block: BlockProxy, func: Func) {
         for (let code of this.blockOption.codes ?? []) {
@@ -817,32 +817,39 @@ export class IfBlock extends BlockInstruction {
         return res;
     }
     toString(option: Required<FormatOption>): string {
-        let typeStr = this.getTypeString(this.blockOption.type);
-
-        let name = this.instrOption.name;
-        let label = this.blockOption.label;
-        let header = label ? `${name} $${label} ${typeStr}` : `${name} ${typeStr}`;
+        let header = [
+            this.instrOption.name,
+            itemName(this.blockOption.label),
+            this.getTypeString(this.blockOption.type),
+        ];
 
         let thenContent = this.blockOption.then?.map(it => it.toString(option)) ?? [];
         let elseContent = this.blockOption.else?.map(it => it.toString(option)) ?? [];
 
-        let res: string[];
         if (elseContent.length) {
-            res = [
+            let thenPart = expandInstr({
+                option,
                 header,
-                addIndent(thenContent.join("\n"), " ", option.indent),
-                "else",
-                addIndent(elseContent.join("\n"), " ", option.indent),
-                "end"
-            ];
+                body: thenContent,
+                end: "else"
+            })
+
+            let elsePart = expandInstr({
+                option,
+                header: [],
+                body: thenContent,
+                end: "end"
+            })
+
+            return thenPart + elsePart;
         } else {
-            res = [
+            return expandInstr({
+                option,
                 header,
-                addIndent(thenContent.join("\n"), " ", option.indent),
-                "end"
-            ];
+                body: thenContent,
+                end: "end"
+            })
         }
-        return res.join("\n");
     }
     setImmediateIndexToName(env: Env, block: BlockProxy, func: Func) {
         block = block.createSubBlock(this);

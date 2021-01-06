@@ -677,6 +677,7 @@ export enum SectionType {
 
 export interface FormatOption {
     indent?: number;
+    indentChar?: string;
 }
 
 export enum IndexType {

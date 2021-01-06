@@ -85,7 +85,7 @@ export class Env {
     }
 
     private getType(): TypeOption[] {
-        let types = this.option.type;
+        let types = [...this.option.type];
 
         let typeOptions = this.option.import.filter(it => it.type === ImportExportType.Function) as TypeOption[];
         let importFuncs = typeOptions.map(it => ({ params: it.params, results: it.results }));

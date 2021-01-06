@@ -1,6 +1,6 @@
-import { array, arrayInt, buf, expr, uint, notIgnore, exprMap, obj, objMap, size, str, sint, arraySint, decodeObject } from './encode';
+import { array, arrayInt, buf, expr, uint, notIgnore, exprMap, obj, objMap, size, str, sint, arraySint } from './encode';
 import { NameSection } from './InnerModule';
-import { ElementType, FuncType, ImportExportType, NameType, SectionType, Type, U32 } from './Type';
+import { DataOption, ElementOption, ElementType, ExportOption, FuncType, GlobalOption, ImportExportType, ImportOption, MemoryOption, NameType, SectionType, TableOption, Type, TypeOption, U32 } from './Type';
 
 /**
  * 段
@@ -53,6 +53,16 @@ export class TypeSection extends Section {
     readonly type = SectionType.TypeSection;
     @array(FunctionType)
     functionTypes!: FunctionType[];
+
+    getTypes(nameSec?: NameSection): TypeOption[] {
+        return this.functionTypes.map((it, i) => {
+            return {
+                name: nameSec?.typeNameSubSection?.names.find(it => it.index === i)?.name,
+                params: it.params,
+                results: it.results,
+            }
+        });
+    }
 }
 
 /**
@@ -170,6 +180,54 @@ export class ImportSection extends Section {
     readonly type = SectionType.ImportSection;
     @array(Import)
     imports!: Import[];
+
+    getImportOptions(types: TypeOption[]): ImportOption[] {
+        return this.imports.map(it => {
+            let common = {
+                module: it.module,
+                importName: it.name,
+                type: it.desc.type,
+            };
+
+            switch (it.desc.type) {
+                case ImportExportType.Function: {
+                    let desc = it.desc as FunctionImportDesc;
+                    let t = types[desc.typeIndex];
+                    if (!t) throw new Error(`type ${desc.typeIndex}: 不存在该类型`);
+                    return {
+                        ...common,
+                        params: t.params,
+                        results: t.results,
+                    }
+                }
+                case ImportExportType.Table: {
+                    let desc = it.desc as TableImportDesc;
+                    return {
+                        ...common,
+                        elementType: desc.table.elementType,
+                        min: desc.table.min,
+                        max: desc.table.max,
+                    }
+                }
+                case ImportExportType.Memory: {
+                    let desc = it.desc as MemoryImportDesc;
+                    return {
+                        ...common,
+                        min: desc.memory.min,
+                        max: desc.memory.max,
+                    }
+                }
+                case ImportExportType.Global: {
+                    let desc = it.desc as GlobalImportDesc;
+                    return {
+                        ...common,
+                        valueType: desc.global.valueType,
+                        mutable: desc.global.mutable,
+                    }
+                }
+            }
+        }) as ImportOption[];
+    }
 }
 
 /**
@@ -188,6 +246,16 @@ export class TableSection extends Section {
     readonly type = SectionType.TableSection;
     @array(Table)
     tables!: Table[];
+
+    getTableOptions(): TableOption[] {
+        return this.tables.map(it => {
+            return {
+                elementType: it.elementType,
+                min: it.min,
+                max: it.max,
+            }
+        })
+    }
 }
 
 /**
@@ -197,6 +265,15 @@ export class MemorySection extends Section {
     readonly type = SectionType.MemorySection;
     @array(Memory)
     memories!: Memory[];
+
+    getMemoryOptions(): MemoryOption[] {
+        return this.memories.map(it => {
+            return {
+                min: it.min,
+                max: it.max,
+            }
+        })
+    }
 }
 
 /**
@@ -206,6 +283,16 @@ export class GlobalSection extends Section {
     readonly type = SectionType.GlobalSection;
     @array(InitedGlobal)
     globals!: InitedGlobal[];
+
+    getGlobalOptions(): GlobalOption[] {
+        return this.globals.map(it => {
+            return {
+                valueType: it.valueType,
+                mutable: it.mutable,
+                init: it.init
+            } as GlobalOption;
+        })
+    }
 }
 
 /**
@@ -214,6 +301,8 @@ export class GlobalSection extends Section {
 export abstract class ExportDesc {
     @uint
     abstract type: ImportExportType;
+    @uint
+    index!: U32;
 }
 
 /**
@@ -221,8 +310,6 @@ export abstract class ExportDesc {
  */
 export class FunctionExportDesc extends ExportDesc {
     type = ImportExportType.Function;
-    @uint
-    functionIndex!: U32;
 }
 
 /**
@@ -230,8 +317,6 @@ export class FunctionExportDesc extends ExportDesc {
  */
 export class TableExportDesc extends ExportDesc {
     type = ImportExportType.Table;
-    @uint
-    tableIndex!: U32;
 }
 
 /**
@@ -239,8 +324,6 @@ export class TableExportDesc extends ExportDesc {
  */
 export class MemoryExportDesc extends ExportDesc {
     type = ImportExportType.Memory;
-    @uint
-    memoryIndex!: U32;
 }
 
 /**
@@ -248,8 +331,6 @@ export class MemoryExportDesc extends ExportDesc {
  */
 export class GlobalExportDesc extends ExportDesc {
     type = ImportExportType.Global;
-    @uint
-    globalIndex!: U32;
 }
 
 /**
@@ -267,6 +348,17 @@ export class Export {
     desc!: ExportDesc;
 }
 
+export interface IndexListItem {
+    name?: string;
+}
+
+export interface IndexList {
+    functions: IndexListItem[];
+    tables: IndexListItem[];
+    memories: IndexListItem[];
+    globals: IndexListItem[];
+}
+
 /**
  * 导出段
  */
@@ -274,6 +366,30 @@ export class ExportSection extends Section {
     readonly type = SectionType.ExportSection;
     @array(Export)
     exports !: Export[];
+
+    getExportOptions(opt: IndexList): ExportOption[] {
+        return this.exports.map(it => {
+            let common = {
+                exportName: it.name
+            }
+            let map = {
+                [ImportExportType.Function]: "functions",
+                [ImportExportType.Table]: "tables",
+                [ImportExportType.Memory]: "memories",
+                [ImportExportType.Global]: "globals",
+            }
+
+            let { type, index } = it.desc;
+            let key = map[type] as keyof IndexList;
+            let idx = opt[key][index].name ?? index;
+
+            return {
+                ...common,
+                type,
+                index: idx
+            }
+        });
+    }
 }
 
 /**
@@ -304,6 +420,17 @@ export class ElementSection extends Section {
     readonly type = SectionType.ElementSection;
     @array(Element)
     elements!: Element[];
+
+    getElementOptions(nameSec?: NameSection): ElementOption[] {
+        return this.elements.map((it, i) => {
+            return {
+                name: nameSec?.elementNameSubSection?.names.find(it => it.index === i)?.name,
+                tableIndex: it.tableIndex,
+                offset: it.offset,
+                functionIndexes: it.functionIndexes,
+            }
+        })
+    }
 }
 
 /**
@@ -366,6 +493,17 @@ export class DataSection extends Section {
     readonly type = SectionType.DataSection;
     @array(Data)
     datas!: Data[];
+
+    getDataOptions(nameSec?: NameSection): DataOption[] {
+        return this.datas.map((it, i) => {
+            return {
+                name: nameSec?.dataNameSubSection?.names.find(it => it.index === i)?.name,
+                memoryIndex: it.memoryIndex,
+                offset: it.offset,
+                init: it.init,
+            }
+        });
+    }
 }
 
 /**

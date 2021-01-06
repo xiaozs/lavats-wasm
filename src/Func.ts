@@ -1,9 +1,9 @@
-import { BlockProxy, BlockInstruction, instructionSet } from './Instruction';
+import { combin } from './encode';
+import { Env } from "./Env";
+import { BlockInstruction, BlockProxy, instructionSet } from './Instruction';
 import { Stack } from "./Stack";
 import { FormatOption, FunctionOption, Index, ToBufferOption, Type, TypeOption, U32 } from './Type';
-import { Env } from "./Env";
-import { combin } from './encode';
-import { typesToString, addIndent } from './utils';
+import { expandItem, flatItem, itemName, typeToString } from './utils';
 
 export interface LocalGroup {
     type: Type;
@@ -173,61 +173,36 @@ export class Func {
     }
 
     toString(option: Required<FormatOption>): string {
-        let codes = this.codesToString(option);
-        let header = [
-            this.name ? `(func $${this.name}` : `(func`,
-            this.paramsToString(),
-            this.resultsToString(),
-            this.localsToString()
-        ].join(" ");
-
-        let content: string[] = [
-            header,
-            addIndent(codes, " ", option.indent),
-            ")"
-        ];
-        return content.join("\n");
+        return expandItem({
+            option,
+            header: [
+                "func",
+                itemName(this.name),
+                ...this.paramsToString(),
+                this.resultsToString(),
+                ...this.localsToString(),
+            ],
+            body: this.codesToString(option)
+        })
     }
     private paramsToString() {
-        let { params } = this.options;
-        let res: string[] = [];
-        for (let it of params ?? []) {
-            if (typeof it === "object") {
-                let type = typesToString([it.type]);
-                res.push(`(param $${it.name} ${type})`);
-            } else {
-                let type = typesToString([it]);
-                res.push(`(param ${type})`)
-            }
-        }
-        return res.join(" ");
+        return this.options.params?.map(it => typeof it === "object" ?
+            flatItem("param", itemName(it.name), typeToString(it.type)) :
+            flatItem("param", typeToString(it))
+        ) ?? [];
     }
     private resultsToString() {
-        let { results } = this.options;
-        let types = typesToString(results ?? []);
-        return results?.length ? `(result ${types})` : "";
+        let types = this.options.results?.map(typeToString) ?? [];
+        return types.length ? flatItem("result", ...types) : "";
     }
     private localsToString() {
-        let { locals } = this.options;
-        let res: string[] = [];
-        for (let it of locals ?? []) {
-            if (typeof it === "object") {
-                let type = typesToString([it.type]);
-                res.push(`(local $${it.name} ${type})`);
-            } else {
-                let type = typesToString([it]);
-                res.push(`(local ${type})`)
-            }
-        }
-        return res.join(" ");
+        return this.options.locals?.map(it => typeof it === "object" ?
+            flatItem("local", itemName(it.name), typeToString(it.type)) :
+            flatItem("local", typeToString(it))
+        ) ?? [];
     }
-    private codesToString(option: Required<FormatOption>): string {
-        let { codes } = this.options;
-        let res: string[] = [];
-        for (let it of codes ?? []) {
-            res.push(it.toString(option))
-        }
-        return res.join("\n");
+    private codesToString(option: Required<FormatOption>): string[] {
+        return this.options.codes?.map(it => it.toString(option)) ?? []
     }
 
     setImmediateIndexToName(env: Env) {

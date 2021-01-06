@@ -15,7 +15,7 @@ let m = new Module({
         { "name": "table", "elementType": ElementType.funcref, "min": 0 }
     ],
     element: [
-        { "name": "element", "tableIndex": 0, "offset": 0, functionIndexes: [] }
+        { "name": "element", "tableIndex": 0, "offset": 0, functionIndexes: [0] }
     ],
     import: [
         { name: "test", "module": "js", "importName": "test", "type": ImportExportType.Memory, "min": 0 },
