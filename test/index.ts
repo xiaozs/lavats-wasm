@@ -40,11 +40,10 @@ let m = new Module({
             codes: [
                 Code.block({
                     label: "block",
-                    type: BlockType.I32,
+                    type: { results: [Type.I32] },
                     codes: [
                         Code.block({
                             label: "block2",
-                            type: BlockType.Empty,
                             codes: [
                                 Code.call("imFunc"),
                             ]
@@ -55,7 +54,7 @@ let m = new Module({
                 Code.i32.Const(10),
                 Code.If({
                     label: "if",
-                    type: "ifBlock",
+                    type: { params: [Type.I32] },
                     then: [
                         Code.drop,
                         Code.br(0)
@@ -66,7 +65,6 @@ let m = new Module({
                 }),
                 Code.i32.Const(10),
                 Code.If({
-                    type: BlockType.Empty,
                     else: [
                         Code.nop
                     ]

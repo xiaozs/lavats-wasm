@@ -3,8 +3,8 @@ import type { Env } from "./Env";
 import type { Func } from "./Func";
 import type { NameMap } from './Section';
 import { Stack } from './Stack';
-import { BlockOption, BlockType, CheckOption, FormatOption, IfOption, ImmediateType, Index, IndexType, InstructionOption, NormalInstructionOption, SpecialInstructionOption, ToBufferOption, Type, TypeOption, U32 } from './Type';
-import { expandInstr, flatInstr, itemName } from './utils';
+import { BlockOption, BlockType, blockTypeMap, CheckOption, FormatOption, IfOption, ImmediateType, Index, IndexType, InstructionOption, isSameType, NormalInstructionOption, SpecialInstructionOption, ToBufferOption, Type, TypeOption, U32 } from './Type';
+import { expandInstr, flatInstr, flatItem, itemName, typeToString } from './utils';
 
 type InstrsOption = (Omit<NormalInstructionOption, "code"> | Omit<SpecialInstructionOption, "code">) & { code: number[] };
 
@@ -47,12 +47,12 @@ export const instructions: readonly InstructionOption[] = encode([
         name: "br",
         code: [0x0C], immediateTypes: [ImmediateType.Index],
         immediateIndexTypes: [IndexType.Label],
-        check({ env, stack, immediates, block }) {
+        check({ stack, immediates, block }) {
             let labelIndex = immediates[0];
             let isValidate = block.validateLabel(labelIndex);
             if (!isValidate) throw new Error(`无法找到label ${labelIndex}, 或label ${labelIndex} 超出界限`);
 
-            let type = block.getType(env);
+            let type = block.getType();
             stack.checkStackTop(type.results ?? [], false);
         }
     },
@@ -60,7 +60,7 @@ export const instructions: readonly InstructionOption[] = encode([
         name: "br_if",
         code: [0x0D], immediateTypes: [ImmediateType.Index],
         immediateIndexTypes: [IndexType.Label],
-        check({ env, stack, immediates, block }) {
+        check({ stack, immediates, block }) {
             let labelIndex = immediates[0];
             let isValidate = block.validateLabel(labelIndex);
             if (!isValidate) throw new Error(`无法找到label ${labelIndex}, 或label ${labelIndex} 超出界限`);
@@ -69,7 +69,7 @@ export const instructions: readonly InstructionOption[] = encode([
             if (!top) throw new Error(`空栈`);
             if (top !== Type.I32) throw new Error(`top0 参数的类型应该为 I32`);
 
-            let type = block.getType(env);
+            let type = block.getType();
             stack.checkStackTop(type.results ?? [], false);
         }
     },
@@ -77,7 +77,7 @@ export const instructions: readonly InstructionOption[] = encode([
         name: "br_table",
         code: [0x0E], immediateTypes: [ImmediateType.IndexArray, ImmediateType.Index],
         immediateIndexTypes: [IndexType.Label, IndexType.Label],
-        check({ env, stack, immediates, block }) {
+        check({ stack, immediates, block }) {
             let labelIndexes: Index[] = immediates[0];
             let defaultIndex: Index = immediates[1];
             let indexes = [...labelIndexes, defaultIndex];
@@ -87,15 +87,15 @@ export const instructions: readonly InstructionOption[] = encode([
                 if (!isValidate) throw new Error(`无法找到label ${idx}, 或label ${idx} 超出界限`);
             }
 
-            let type = block.getType(env);
+            let type = block.getType();
             stack.checkStackTop(type.results ?? [], false);
         }
     },
     {
         name: "return",
         code: [0x0F], immediateTypes: [],
-        check({ env, stack, block }) {
-            let type = block.getType(env);
+        check({ stack, block }) {
+            let type = block.getType();
             stack.checkStackTop(type.results ?? [], false);
         }
     },
@@ -578,45 +578,20 @@ export class Instruction {
             this.immediates = newImms;
         }
     }
+
+    getBlockTypes(): TypeOption[] {
+        return [];
+    }
 }
 
 /**
  * 块类型指令
  */
 export abstract class BlockInstruction extends Instruction {
-    /**
-     * 获取当前块指令的签名类型
-     * @param env 环境上下文
-     */
-    getType(env: Env): TypeOption | undefined {
-        let blockType = this.immediates[0];
-        switch (blockType) {
-            case BlockType.I32: return { params: [], results: [Type.I32] };
-            case BlockType.I64: return { params: [], results: [Type.I64] };
-            case BlockType.F32: return { params: [], results: [Type.F32] };
-            case BlockType.F64: return { params: [], results: [Type.F64] };
-            case BlockType.V128: return { params: [], results: [Type.V128] };
-            case BlockType.Empty: return { params: [], results: [] };
-            default: return env.findType(blockType);
-        }
-    }
-
-    protected getTypeString(type: BlockType | Index): string {
-        if (typeof type === "string") {
-            return `(type $${type})`;
-        } if (type < 0) {
-            let map: Record<number, string> = {
-                [BlockType.I32]: "(result i32)",
-                [BlockType.I64]: "(result i64)",
-                [BlockType.F32]: "(result f32)",
-                [BlockType.F64]: "(result f64)",
-                [BlockType.V128]: "(result v128)",
-                [BlockType.Empty]: "",
-            }
-            return map[type];
-        } else {
-            return `(type ${type})`;
-        }
+    protected getTypeString(type: TypeOption): string {
+        let params = type.params?.length ? flatItem("param", ...type.params.map(it => typeToString(it))) : "";
+        let results = type.results?.length ? flatItem("result", ...type.results.map(it => typeToString(it))) : "";
+        return flatInstr(params, results);
     }
 
     /**
@@ -634,8 +609,27 @@ export abstract class BlockInstruction extends Instruction {
                 block: opt.block.createSubBlock(this)
             });
         }
-        if (stack.length !== type.results?.length) throw new Error("出参不匹配");
-        stack.checkStackTop(type.results, false);
+        let results = type.results ?? [];
+        if (stack.length !== results.length) throw new Error("出参不匹配");
+        stack.checkStackTop(results, false);
+    }
+
+    protected getTypeImmediate(env: Env) {
+        for (let it of blockTypeMap) {
+            let isThisType = isSameType(this.type, it.option);
+            if (isThisType) return it.type;
+        }
+
+        let typeIndex = env.types.findIndex(it => isSameType(this.type, it));
+        return typeIndex;
+    }
+
+    protected isBaseBlockType() {
+        for (let it of blockTypeMap) {
+            let isThisType = isSameType(this.type, it.option);
+            if (isThisType) return true;
+        }
+        return false;
     }
 
     /**
@@ -646,12 +640,13 @@ export abstract class BlockInstruction extends Instruction {
     /**
      * 块的签名类型
      */
-    abstract get type(): BlockType | Index;
+    abstract get type(): TypeOption;
 
     abstract getLables(): (string | undefined)[];
 
     abstract toString(option: Required<FormatOption>): string;
     abstract setImmediateIndexToName(env: Env, block: BlockProxy, func: Func): void;
+    abstract getBlockTypes(): TypeOption[];
 }
 
 /**
@@ -674,12 +669,10 @@ export abstract class NormalBlockInstruction extends BlockInstruction {
         return this.blockOption.label;
     }
     get type() {
-        return this.blockOption.type;
+        return this.blockOption.type ?? {};
     }
     check(opt: Omit<CheckOption, "immediates">) {
-        let blockType = this.immediates[0];
-        let type = this.getType(opt.env);
-        if (!type) throw new Error(`type ${blockType}不存在`);
+        let type = this.type;
 
         opt.stack.checkStackTop(type.params ?? []);
 
@@ -692,10 +685,10 @@ export abstract class NormalBlockInstruction extends BlockInstruction {
             ...opt,
             block: opt.block.createSubBlock(this)
         };
-
+        let type = this.getTypeImmediate(opt.env);
         return combin([
             this.instrOption.code,
-            encodeInt(this.immediates[0]),
+            encodeInt(type),
             ...(this.blockOption.codes ?? []).map(it => it.toBuffer(opt)),
             instructionSet["end"].code
         ]);
@@ -718,7 +711,7 @@ export abstract class NormalBlockInstruction extends BlockInstruction {
             header: [
                 this.instrOption.name,
                 itemName(this.blockOption.label),
-                this.getTypeString(this.blockOption.type),
+                this.getTypeString(this.type),
             ],
             body: this.blockOption.codes?.map(it => it.toString(option)) ?? [],
             end: "end"
@@ -729,6 +722,14 @@ export abstract class NormalBlockInstruction extends BlockInstruction {
             block = block.createSubBlock(this);
             code.setImmediateIndexToName(env, block, func);
         }
+    }
+    getBlockTypes(): TypeOption[] {
+        let type = this.isBaseBlockType() ? [] : [this.type];
+        let subBlockTypes = (this.blockOption.codes ?? []).flatMap(it => it.getBlockTypes());
+        return [
+            ...type,
+            ...subBlockTypes
+        ]
     }
 }
 
@@ -754,15 +755,13 @@ export class IfBlock extends BlockInstruction {
         return this.blockOption.label;
     }
     get type() {
-        return this.blockOption.type;
+        return this.blockOption.type ?? {};
     }
     constructor(private blockOption: IfOption) {
         super(instructionSet["if"], [blockOption.type]);
     }
     check(opt: Omit<CheckOption, "immediates">) {
-        let blockType = this.immediates[0];
-        let type = this.getType(opt.env);
-        if (!type) throw new Error(`type ${blockType}不存在`);
+        let type = this.type;
 
         let top = opt.stack.pop();
         if (!top) throw new Error(`空栈`);
@@ -781,10 +780,11 @@ export class IfBlock extends BlockInstruction {
             block: opt.block.createSubBlock(this)
         };
 
+        let type = this.getTypeImmediate(opt.env);
         if (this.blockOption.else) {
             return combin([
                 this.instrOption.code,
-                encodeInt(this.immediates[0]),
+                encodeInt(type),
                 ...(this.blockOption.then ?? []).map(it => it.toBuffer(opt)),
                 instructionSet["else"].code,
                 ...(this.blockOption.else ?? []).map(it => it.toBuffer(opt)),
@@ -793,7 +793,7 @@ export class IfBlock extends BlockInstruction {
         } else {
             return combin([
                 this.instrOption.code,
-                encodeInt(this.immediates[0]),
+                encodeInt(type),
                 ...(this.blockOption.then ?? []).map(it => it.toBuffer(opt)),
                 instructionSet["end"].code
             ]);
@@ -820,7 +820,7 @@ export class IfBlock extends BlockInstruction {
         let header = [
             this.instrOption.name,
             itemName(this.blockOption.label),
-            this.getTypeString(this.blockOption.type),
+            this.getTypeString(this.type),
         ];
 
         let thenContent = this.blockOption.then?.map(it => it.toString(option)) ?? [];
@@ -860,6 +860,16 @@ export class IfBlock extends BlockInstruction {
         for (let code of this.blockOption.else ?? []) {
             code.setImmediateIndexToName(env, block, func);
         }
+    }
+    getBlockTypes(): TypeOption[] {
+        let type = this.isBaseBlockType() ? [] : [this.type];
+        let thenBlockTypes = (this.blockOption.then ?? []).flatMap(it => it.getBlockTypes());
+        let elseBlockTypes = (this.blockOption.else ?? []).flatMap(it => it.getBlockTypes());
+        return [
+            ...type,
+            ...thenBlockTypes,
+            ...elseBlockTypes,
+        ]
     }
 }
 
@@ -907,11 +917,10 @@ export class BlockProxy {
 
     /**
      * 获取当前块的签名类型
-     * @param env 环境上下文
      */
-    getType(env: Env): TypeOption {
+    getType(): TypeOption {
         if (this.instr instanceof BlockInstruction) {
-            return this.instr.getType(env)!;
+            return this.instr.type;
         } else {
             return this.instr.getType();
         }
@@ -1037,7 +1046,7 @@ export function bufferToInstr(buffer: ArrayBuffer, labelNames: NameMap[] = [], t
             let label = labelNames.find(it => it.index === blockIndex)?.name;
 
             let blockType = block.immediates[0];
-            let type = typeOptions[blockType]?.name ?? blockType;
+            let type = typeOptions[blockType] ?? blockTypeMap.find(it => it.type === blockType)?.option;
 
             let fn = blockMap[block.name];
             let instr: BlockInstruction;

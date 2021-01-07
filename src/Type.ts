@@ -16,6 +16,11 @@ export type V128 =
     | { type: "v32x4", value: [I32, I32, I32, I32] }
     | { type: "v64x2", value: [I64, I64] }
 
+
+function isI(bitCount: number, val: number): boolean {
+    return -(2 ** (bitCount - 1)) <= val && val <= 2 ** bitCount;
+}
+
 /**
  * 索引，可为U32，或字符串
  */
@@ -34,7 +39,7 @@ function isInt(val: number) {
  * @param val 值
  */
 export function isI8(val: number) {
-    return isInt(val) && (-(2 ** 7) <= val && val <= 2 ** 7 - 1);
+    return isInt(val) && isI(8, val);
 }
 
 /**
@@ -42,7 +47,7 @@ export function isI8(val: number) {
  * @param val 值
  */
 export function isI16(val: number) {
-    return isInt(val) && (-(2 ** 15) <= val && val <= 2 ** 15 - 1);
+    return isInt(val) && isI(16, val);
 }
 
 /**
@@ -58,7 +63,7 @@ export function isU32(val: number) {
  * @param val 值
  */
 export function isI32(val: number) {
-    return isInt(val) && (-(2 ** 31) <= val && val <= 2 ** 31 - 1);
+    return isInt(val) && isI(32, val);
 }
 
 /**
@@ -66,7 +71,7 @@ export function isI32(val: number) {
  * @param val 值
  */
 export function isI64(val: number) {
-    return isInt(val);
+    return isInt(val) && isI(64, val);
 }
 
 /**
@@ -97,6 +102,28 @@ export function isV128(val: V128) {
         case "v64x2": return val.value.length === 2 && val.value.every(it => isI64(it));
         default: return false;
     }
+}
+
+export function isSameType(t1: TypeOption, t2: TypeOption) {
+    let { params: t1Ps = [], results: t1Rs = [] } = t1;
+    let { params: t2Ps = [], results: t2Rs = [] } = t2;
+
+    if (t1Ps.length !== t2Ps.length) return false;
+    if (t1Rs.length !== t2Rs.length) return false;
+
+    for (let i = 0; i < t1Ps?.length ?? 0; i++) {
+        let p1 = t1Ps[i];
+        let p2 = t2Ps[i];
+        if (p1 !== p2) return false;
+    }
+
+    for (let i = 0; i < t1Rs.length; i++) {
+        let r1 = t1Rs[i];
+        let r2 = t2Rs[i];
+        if (r1 !== r2) return false;
+    }
+
+    return true;
 }
 
 /**
@@ -159,6 +186,15 @@ export enum BlockType {
     V128 = -0x05,
     Empty = -0x40,
 }
+
+export const blockTypeMap: { type: BlockType, option: TypeOption }[] = [
+    { type: BlockType.I32, option: { params: [], results: [Type.I32] } },
+    { type: BlockType.I64, option: { params: [], results: [Type.I64] } },
+    { type: BlockType.F32, option: { params: [], results: [Type.F32] } },
+    { type: BlockType.F64, option: { params: [], results: [Type.F64] } },
+    { type: BlockType.V128, option: { params: [], results: [Type.V128] } },
+    { type: BlockType.Empty, option: { params: [], results: [] } },
+];
 
 /**
  * 导入、导出项的类型
@@ -621,7 +657,7 @@ export interface BlockOption {
     /**
      * 块的签名类型
      */
-    type: BlockType | Index;
+    type?: TypeOption;
     /**
      * 块的代码
      */
@@ -639,7 +675,7 @@ export interface IfOption {
     /**
      * 块的签名类型
      */
-    type: BlockType | Index;
+    type?: TypeOption;
     /**
      * true分支代码
      */

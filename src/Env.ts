@@ -1,5 +1,5 @@
 import type { Func } from './Func';
-import { GlobalOption, ImportExportType, Index, IndexType, MemoryOption, ModuleOption, TableOption, Type, TypeOption, U32 } from './Type';
+import { GlobalOption, ImportExportType, Index, IndexType, isSameType, MemoryOption, ModuleOption, TableOption, Type, TypeOption, U32 } from './Type';
 
 
 type EnvKey = "functions" | "tables" | "memories" | "globals" | "types";
@@ -91,34 +91,15 @@ export class Env {
         let importFuncs = typeOptions.map(it => ({ params: it.params, results: it.results }));
 
         let funcTypes = this.functions.map(it => ({ ...it, name: undefined }));
-        for (let it of [...funcTypes, ...importFuncs]) {
-            let isInArr = types.some(t => this.isSameType(t, it));
+        let blockTypes = this.option.function.flatMap(it => it.getBlockTypes());
+
+        for (let it of [...importFuncs, ...funcTypes, ...blockTypes]) {
+            let isInArr = types.some(t => isSameType(t, it));
             if (isInArr) continue;
             types.push(it);
         }
 
         return types;
-    }
-    isSameType(t1: TypeOption, t2: TypeOption) {
-        let { params: t1Ps = [], results: t1Rs = [] } = t1;
-        let { params: t2Ps = [], results: t2Rs = [] } = t2;
-
-        if (t1Ps.length !== t2Ps.length) return false;
-        if (t1Rs.length !== t2Rs.length) return false;
-
-        for (let i = 0; i < t1Ps?.length ?? 0; i++) {
-            let p1 = t1Ps[i];
-            let p2 = t2Ps[i];
-            if (p1 !== p2) return false;
-        }
-
-        for (let i = 0; i < t1Rs.length; i++) {
-            let r1 = t1Rs[i];
-            let r2 = t2Rs[i];
-            if (r1 !== r2) return false;
-        }
-
-        return true;
     }
     private get(type: ImportExportType.Function): TypeOption[];
     private get(type: ImportExportType.Global): Omit<GlobalOption, "init">[];

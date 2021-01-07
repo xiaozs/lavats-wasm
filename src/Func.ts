@@ -68,8 +68,9 @@ export class Func {
                 block
             });
         }
-        if (stack.length !== type.results?.length) throw new Error("出参不匹配");
-        stack.checkStackTop(type.results, false);
+        let results = type.results ?? [];
+        if (stack.length !== results.length) throw new Error("出参不匹配");
+        stack.checkStackTop(results, false);
     }
 
     /**
@@ -230,5 +231,9 @@ export class Func {
 
             return names[idx] ?? idx;
         }
+    }
+
+    getBlockTypes() {
+        return this.options.codes?.flatMap(it => it.getBlockTypes()) ?? [];
     }
 }

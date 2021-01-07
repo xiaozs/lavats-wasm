@@ -1,6 +1,6 @@
 import { decodeUint, decodeObject, Offset, encodeObject, combin } from './encode';
 import { Module } from './Module';
-import { ElementType, FunctionOption, GlobalOption, ImportExportType, ImportOption, MemoryOption, NameType, SectionType, TableOption, Type, TypeOption } from './Type';
+import { ElementType, FunctionOption, GlobalOption, ImportExportType, ImportOption, isSameType, MemoryOption, NameType, SectionType, TableOption, Type, TypeOption } from './Type';
 import { CodeSection, CustomSection, DataNameSubSection, DataSection, ElementNameSubSection, ElementSection, Export, ExportSection, FunctionExportDesc, FunctionImportDesc, FunctionNameSubSection, FunctionSection, FunctionType, Global, GlobalExportDesc, GlobalImportDesc, GlobalNameSubSection, GlobalSection, Import, ImportDesc, ImportSection, InitedGlobal, LabelNameSubSection, LocalNameSubSection, Memory, MemoryExportDesc, MemoryImportDesc, MemoryNameSubSection, MemorySection, ModuleNameSubSection, NameSubSection, Section, StartSection, Table, TableExportDesc, TableImportDesc, TableNameSubSection, TableSection, TypeNameSubSection, TypeSection, Element, Code, Local, Data, NameMap, IndirectNameAssociation, IndirectNameMap, NameMapSubSection } from './Section';
 import { Env } from './Env';
 import { Func } from './Func';
@@ -54,7 +54,7 @@ export class InnerModule {
                 case ImportExportType.Function: {
                     let desc = new FunctionImportDesc();
                     let type2 = { params: it.params ?? [], results: it.results ?? [] };
-                    desc.typeIndex = env.types.findIndex(type1 => env.isSameType(type1, type2));
+                    desc.typeIndex = env.types.findIndex(type1 => isSameType(type1, type2));
                     imp.desc = desc;
                     return imp;
                 }
@@ -100,7 +100,7 @@ export class InnerModule {
         if (!module.function.length) return;
         let typeIndexes = module.function.map(it => {
             let type = it.getType();
-            let typeIndex = env.types.findIndex(type1 => env.isSameType(type1, type));
+            let typeIndex = env.types.findIndex(type1 => isSameType(type1, type));
             return typeIndex;
         });
         let res = new FunctionSection();
@@ -319,7 +319,7 @@ export class InnerModule {
             element: element ?? [],
             import: imports ?? [],
             export: exports ?? [],
-            type: type ?? [],
+            type: (type ?? []).filter(it => it.name),
             global: global ?? [],
             function: functions ?? [],
             start
