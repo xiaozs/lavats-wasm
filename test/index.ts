@@ -71,6 +71,9 @@ let m = new Module({
                 })
             ]
         })
+    ],
+    custom: [
+        { name: "hello", buffer: data.string("hello").toBuffer() }
     ]
 });
 let mBuf = m.toBuffer();

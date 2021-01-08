@@ -522,6 +522,19 @@ export type GlobalOption =
     | { name?: string, valueType: Type.F32, mutable?: boolean, init: F32 }
     | { name?: string, valueType: Type.F64, mutable?: boolean, init: F64 }
 
+/**
+ * 自定义段配置
+ */
+export interface CustomOption {
+    /**
+     * 名称
+     */
+    name: string;
+    /**
+     * 内容
+     */
+    buffer: ArrayBuffer;
+}
 
 /**
  * Module的配置
@@ -571,6 +584,10 @@ export interface ModuleOption {
      * 开始函数
      */
     start?: Index;
+    /**
+     * 自定义段
+     */
+    custom?: CustomOption[];
 }
 
 /**

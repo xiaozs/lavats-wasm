@@ -4,7 +4,7 @@ import { Func } from './Func';
 import { bufferToInstr } from './Instruction';
 import { Module } from './Module';
 import { Code, CodeSection, CustomSection, Data, DataNameSubSection, DataSection, Element, ElementNameSubSection, ElementSection, Export, ExportSection, FunctionExportDesc, FunctionImportDesc, FunctionNameSubSection, FunctionSection, FunctionType, Global, GlobalExportDesc, GlobalImportDesc, GlobalNameSubSection, GlobalSection, Import, ImportSection, IndirectNameAssociation, IndirectNameMap, InitedGlobal, LabelNameSubSection, Local, LocalNameSubSection, Memory, MemoryExportDesc, MemoryImportDesc, MemoryNameSubSection, MemorySection, ModuleNameSubSection, NameMap, NameMapSubSection, NameSubSection, Section, StartSection, Table, TableExportDesc, TableImportDesc, TableNameSubSection, TableSection, TypeNameSubSection, TypeSection } from './Section';
-import { ElementType, FunctionOption, ImportExportType, isSameType, NameType, SectionType, Type, TypeOption } from './Type';
+import { CustomOption, ElementType, FunctionOption, ImportExportType, isSameType, NameType, SectionType, Type, TypeOption } from './Type';
 
 /**
  * 内用模块
@@ -333,6 +333,20 @@ export class InnerModule {
     }
 
     /**
+     * 生成自定义段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createCustomSections(module: Module, env: Env): CustomSection[] {
+        return module.custom?.map(it => {
+            let custom = new CustomSection();
+            custom.name = it.name;
+            custom.buffer = it.buffer;
+            return custom;
+        }) ?? [];
+    }
+
+    /**
      * 生成InnerModule
      * @param module 模块
      * @param env 环境上下文
@@ -350,7 +364,8 @@ export class InnerModule {
             this.createElementSection(module, env),
             this.createCodeSection(module, env),
             this.createDataSection(module, env),
-            this.createNameSection(module, env)
+            this.createNameSection(module, env),
+            ...this.createCustomSections(module, env),
         ];
         let secs = sections.filter(it => it) as Section[];
         let res = new InnerModule(secs);
@@ -404,6 +419,8 @@ export class InnerModule {
         let startIndex = this.startSection?.functionIndex;
         let start = startIndex !== undefined ? allFunctions[startIndex].name : startIndex;
 
+        let custom = this.getCustomOptions();
+
         let exports = this.exportSection?.getExportOptions({
             functions: allFunctions,
             tables: allTables,
@@ -422,7 +439,8 @@ export class InnerModule {
             type: (type ?? []).filter(it => it.name),
             global: global ?? [],
             function: functions ?? [],
-            start
+            start,
+            custom
         });
 
         module.setImmediateIndexToName();
@@ -490,6 +508,13 @@ export class InnerModule {
     }
 
     /**
+     * 获取自定义段的配置
+     */
+    private getCustomOptions(): CustomOption[] {
+        return this.getCustomSections().filter(it => it.name !== "name").map(it => ({ name: it.name, buffer: it.buffer }));
+    }
+
+    /**
      * 检查magic
      * @param buffer 缓存
      * @param offset 偏移
@@ -537,7 +562,7 @@ export class InnerModule {
      */
     getCustomSections(name?: string): CustomSection[] {
         let secArr = this.sections.filter(it => it.type === SectionType.CustomSection) as CustomSection[];
-        if (name !== undefined) {
+        if (name === undefined) {
             return secArr;
         } else {
             return secArr.filter(it => it.name === name);

@@ -1,6 +1,6 @@
 {
   "name": "lavats-wasm",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "",
   "main": "dist/index.js",
   "scripts": {
@@ -8,18 +8,9 @@
     "build": "webpack"
   },
   "keywords": [
-    "lex",
-    "lexer",
-    "lexical",
-    "analysis",
-    "scan",
-    "scanner",
-    "scanning",
-    "token",
-    "yacc",
-    "parser",
-    "compiler",
-    "bnf"
+    "wasm",
+    "webassmebly",
+    "assmebly"
   ],
   "author": "xiaozs",
   "license": "ISC",

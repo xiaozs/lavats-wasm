@@ -18,7 +18,8 @@ function getDefaultOption(): Readonly<ModuleOption> {
         type: [],
         global: [],
         function: [],
-        start: undefined
+        start: undefined,
+        custom: []
     }
 }
 
