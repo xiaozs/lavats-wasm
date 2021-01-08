@@ -1,5 +1,5 @@
 import { readFile, readFileSync, writeFileSync } from "fs";
-import { BlockType, Code, Func, ImportExportType, Module, Type, ElementType, data } from "../src";
+import { BlockType, Code, Func, ImportExportType, Module, Type, ElementType, data, DataType } from "../src";
 
 import { InnerModule } from "../src/InnerModule";
 

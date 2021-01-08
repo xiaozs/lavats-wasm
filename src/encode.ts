@@ -1,21 +1,39 @@
 import { instructionSet } from './Instruction';
 import { Type } from './Type';
 
+/**
+ * offset的包裹对象, 以应对js没有指针问题
+ */
 export interface Offset {
+    /**
+     * 偏移值
+     */
     value: number;
 }
 
+// 文本编码器
 let te = new TextEncoder();
+// 文本解码器
 let td = new TextDecoder();
 
+/**
+ * 缓存读取器
+ */
 export interface Reader<T> {
     (buffer: ArrayBuffer, offset: Offset): T;
 }
 
+/**
+ * 缓存写入器
+ */
 export interface Writer<T> {
     (item: T): ArrayBuffer
 }
 
+/**
+ * 字符串缓存写入器
+ * @param str 字符串
+ */
 export function encodeString(str: string): ArrayBuffer {
     let length = encodeInt(str.length);
     let content = te.encode(str);
@@ -25,6 +43,9 @@ export function encodeString(str: string): ArrayBuffer {
     ])
 }
 
+/**
+ * 数据类型 -> expr写入器 的映射
+ */
 let encodeExprMap = {
     [Type.I32]: (val: number) => {
         let code = instructionSet["i32.const"].code;
@@ -53,11 +74,21 @@ let encodeExprMap = {
     [Type.V128]: (val: number) => { throw new Error("todo") }
 };
 
+/**
+ * expr写入器
+ * @param type 类型
+ * @param val 值
+ */
 export function encodeExpr(type: Type, val: number): ArrayBuffer {
     let fn = encodeExprMap[type];
     return fn(val);
 }
 
+/**
+ * 缓存写入器
+ * @param buffer 缓存
+ * @param isWriteSize 是否写入大写
+ */
 export function encodeBuffer(buffer: ArrayBuffer, isWriteSize = true) {
     let size = isWriteSize ? encodeInt(buffer.byteLength) : new ArrayBuffer(0);
     return combin([
@@ -66,6 +97,11 @@ export function encodeBuffer(buffer: ArrayBuffer, isWriteSize = true) {
     ])
 }
 
+/**
+ * 字符串读取器
+ * @param buffer 缓存
+ * @param offset 偏移
+ */
 export function decodeString(buffer: ArrayBuffer, offset: Offset): string {
     let length = decodeUint(buffer, offset);
     let start = offset.value;
@@ -76,6 +112,11 @@ export function decodeString(buffer: ArrayBuffer, offset: Offset): string {
     return content;
 }
 
+/**
+ * uint读取器
+ * @param buffer 缓存
+ * @param offset 偏移
+ */
 export function decodeUint(buffer: ArrayBuffer, offset: Offset): number {
     let view = new Uint8Array(buffer);
     let value = 0;
@@ -94,6 +135,11 @@ export function decodeUint(buffer: ArrayBuffer, offset: Offset): number {
     }
 }
 
+/**
+ * sint读取器
+ * @param buffer 缓存
+ * @param offset 偏移
+ */
 export function decodeSint(buffer: ArrayBuffer, offset: Offset): number {
     let view = new Uint8Array(buffer);
     let value = 0;
@@ -115,18 +161,34 @@ export function decodeSint(buffer: ArrayBuffer, offset: Offset): number {
     }
 }
 
+/**
+ * f32读取器
+ * @param buffer 缓存
+ * @param offset 偏移
+ */
 export function decodeF32(buffer: ArrayBuffer, offset: Offset): number {
     let view = new DataView(buffer, offset.value, 4);
     offset.value += 4;
     return view.getFloat32(0);
 }
 
+/**
+ * f64读取器
+ * @param buffer 缓存
+ * @param offset 偏移
+ */
 export function decodeF64(buffer: ArrayBuffer, offset: Offset): number {
     let view = new DataView(buffer, offset.value, 8);
     offset.value += 8;
     return view.getFloat64(0);
 }
 
+/**
+ * 数组读取器
+ * @param buffer 缓存
+ * @param offset 偏移
+ * @param reader 单个数组元素的读取器
+ */
 export function decodeArray<T>(buffer: ArrayBuffer, offset: Offset, reader: Reader<T>): T[] {
     let count = decodeUint(buffer, offset);
     let res: T[] = [];
@@ -137,6 +199,9 @@ export function decodeArray<T>(buffer: ArrayBuffer, offset: Offset, reader: Read
     return res;
 }
 
+/**
+ * 数据类型 -> expr读取器 的映射
+ */
 let decodeExprMap = {
     [Type.I32]: (buffer: ArrayBuffer, offset: Offset) => {
         offset.value += instructionSet["i32.const"].code.byteLength;
@@ -165,11 +230,23 @@ let decodeExprMap = {
     [Type.V128]: (buffer: ArrayBuffer, offset: Offset) => { throw new Error("todo") }
 };
 
+/**
+ * expr读取器
+ * @param buffer 缓存
+ * @param offset 偏移
+ * @param type 数据类型
+ */
 export function decodeExpr(buffer: ArrayBuffer, offset: Offset, type: Type): number {
     let fn = decodeExprMap[type];
     return fn(buffer, offset);
 }
 
+/**
+ * 缓存读取器
+ * @param buffer 缓存
+ * @param offset 偏移
+ * @param size 缓存大小
+ */
 export function decodeBuffer(buffer: ArrayBuffer, offset: Offset, size: number) {
     let start = offset.value;
     let end = start + size;
@@ -177,17 +254,46 @@ export function decodeBuffer(buffer: ArrayBuffer, offset: Offset, size: number) 
     return buffer.slice(start, end);
 }
 
+/**
+ * 装饰器的信息
+ */
 interface Deco {
+    /**
+     * 构造函数
+     */
     target: Function,
+    /**
+     * 被修饰的属性名称
+     */
     key: string;
+    /**
+     * 写入器
+     */
     writer: (val: any, obj: any) => ArrayBuffer;
+    /**
+     * 读取器
+     */
     reader: (buffer: ArrayBuffer, offset: Offset, obj: any, org?: number) => any;
+    /**
+     * 是否是size指示字段
+     */
     isSize?: true;
+    /**
+     * 是否忽略该字段
+     */
     ignore?: (obj: any) => boolean;
 }
 
+/**
+ * 保存装饰器的数组
+ */
 let decos: Deco[] = [];
 
+/**
+ * 获取对象size字段之后所占的大小
+ * @param arr 对象的各部分的缓存的数组
+ * @param sizeIndex 代表size的缓存在数组中的索引
+ */
 function getSize(arr: ArrayBuffer[], sizeIndex: number): ArrayBuffer {
     let total = 0;
     for (let i = sizeIndex + 1; i < arr.length; i++) {
@@ -197,6 +303,10 @@ function getSize(arr: ArrayBuffer[], sizeIndex: number): ArrayBuffer {
     return encodeInt(total);
 }
 
+/**
+ * 对象的写入器
+ * @param obj 对象
+ */
 export function encodeObject(obj: any): ArrayBuffer {
     let decosOfType = decos.filter(it => obj instanceof it.target);
     let res: ArrayBuffer[] = [];
@@ -228,6 +338,12 @@ export function encodeObject(obj: any): ArrayBuffer {
     return combin(res);
 }
 
+/**
+ * 对象的读取器
+ * @param buffer 缓存
+ * @param offset 偏移
+ * @param type 对象的构造函数
+ */
 export function decodeObject(buffer: ArrayBuffer, offset: Offset, type: any) {
     let decosOfType = decos.filter(it => isExtends(type, it.target));
     let obj = new type();
@@ -252,18 +368,37 @@ export function decodeObject(buffer: ArrayBuffer, offset: Offset, type: any) {
     return obj;
 }
 
+/**
+ * uint装饰器
+ * @param target 原型
+ * @param key 字段名称
+ */
 export const uint = (target: any, key: string): void => {
     decos.push({ target: target.constructor, key, writer: encodeInt, reader: decodeUint });
 }
 
+/**
+ * sint装饰器
+ * @param target 原型
+ * @param key 字段名称
+ */
 export const sint = (target: any, key: string): void => {
     decos.push({ target: target.constructor, key, writer: encodeInt, reader: decodeSint });
 }
 
+/**
+ * 字符串装饰器
+ * @param target 原型
+ * @param key 字段名称
+ */
 export const str = (target: any, key: string): void => {
     decos.push({ target: target.constructor, key, writer: encodeString, reader: decodeString });
 }
 
+/**
+ * 缓存的装饰器
+ * @param isWriteSize 是否写入缓存大小
+ */
 export const buf = (isWriteSize = true) => (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
@@ -284,6 +419,10 @@ export const buf = (isWriteSize = true) => (target: any, key: string): void => {
     });
 }
 
+/**
+ * 数组的装饰器（对对象）
+ * @param type 数组的元素的构造函数
+ */
 export const array = (type: Function) => (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
@@ -293,6 +432,10 @@ export const array = (type: Function) => (target: any, key: string): void => {
     });
 }
 
+/**
+ * 数组的装饰器（对多态对象）
+ * @param map 数组的元素的构造函数映射
+ */
 export const arrayMap = (map: Record<number | string, Function>) => (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
@@ -308,7 +451,12 @@ export const arrayMap = (map: Record<number | string, Function>) => (target: any
     });
 }
 
-export const arrayInt = (target: any, key: string): void => {
+/**
+ * 数组的装饰器（对uint）
+ * @param target 原型
+ * @param key 字段名称
+ */
+export const arrayUint = (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
         key,
@@ -317,6 +465,11 @@ export const arrayInt = (target: any, key: string): void => {
     });
 }
 
+/**
+ * 数组的装饰器（对sint）
+ * @param target 原型
+ * @param key 字段名称
+ */
 export const arraySint = (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
@@ -326,6 +479,10 @@ export const arraySint = (target: any, key: string): void => {
     });
 }
 
+/**
+ * expr装饰器
+ * @param type 数据类型
+ */
 export const expr = (type: Type) => (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
@@ -335,6 +492,10 @@ export const expr = (type: Type) => (target: any, key: string): void => {
     });
 }
 
+/**
+ * 对象的装饰器
+ * @param type 对象的构造函数
+ */
 export const obj = (type: Function) => (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
@@ -344,6 +505,10 @@ export const obj = (type: Function) => (target: any, key: string): void => {
     });
 }
 
+/**
+ * 多态对象的装饰器
+ * @param map 构造函数映射
+ */
 export const objMap = (map: Record<number | string, Function>) => (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
@@ -359,6 +524,10 @@ export const objMap = (map: Record<number | string, Function>) => (target: any, 
     });
 }
 
+/**
+ * expr的装饰器
+ * @param mapKey 指示类型的字段名称
+ */
 export const exprMap = (mapKey: string) => (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
@@ -374,6 +543,11 @@ export const exprMap = (mapKey: string) => (target: any, key: string): void => {
     });
 }
 
+/**
+ * size字段的装饰器
+ * @param target 原型
+ * @param key 字段名称
+ */
 export const size = (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
@@ -387,7 +561,10 @@ export const size = (target: any, key: string): void => {
     })
 }
 
-
+/**
+ * 当前字段是否忽略的装饰器
+ * @param flagKey 用于判断是否忽略的字段名称
+ */
 export const notIgnore = (flagKey: string) => (target: any, key: string): void => {
     decos.push({
         target: target.constructor,
@@ -454,6 +631,10 @@ export function isExtends(subClass: Function, baseClass: Function) {
     return false;
 }
 
+/**
+ * 组合多个缓存的方法
+ * @param buffers 缓存
+ */
 export function combin(buffers: ArrayBuffer[]) {
     let total = buffers.reduce((res, it) => res + it.byteLength, 0);
     let res = new Uint8Array(total);
@@ -468,14 +649,27 @@ export function combin(buffers: ArrayBuffer[]) {
     return res.buffer;
 }
 
+/**
+ * f32的写入器
+ * @param num 值
+ */
 export function encodeF32(num: number): ArrayBuffer {
     return new Float32Array([num]).buffer;
 }
 
+/**
+ * f64的写入器
+ * @param num 值
+ */
 export function encodeF64(num: number): ArrayBuffer {
     return new Float64Array([num]).buffer;
 }
 
+/**
+ * 数组的写入器
+ * @param arr 数组
+ * @param writer 单个元素的写入器
+ */
 export function encodeArray<T>(arr: T[], writer: Writer<T>): ArrayBuffer {
     let size = encodeInt(arr.length);
     let buffers: ArrayBuffer[] = [size];

@@ -1,20 +1,33 @@
-import { decodeUint, decodeObject, Offset, encodeObject, combin } from './encode';
-import { Module } from './Module';
-import { ElementType, FunctionOption, GlobalOption, ImportExportType, ImportOption, isSameType, MemoryOption, NameType, SectionType, TableOption, Type, TypeOption } from './Type';
-import { CodeSection, CustomSection, DataNameSubSection, DataSection, ElementNameSubSection, ElementSection, Export, ExportSection, FunctionExportDesc, FunctionImportDesc, FunctionNameSubSection, FunctionSection, FunctionType, Global, GlobalExportDesc, GlobalImportDesc, GlobalNameSubSection, GlobalSection, Import, ImportDesc, ImportSection, InitedGlobal, LabelNameSubSection, LocalNameSubSection, Memory, MemoryExportDesc, MemoryImportDesc, MemoryNameSubSection, MemorySection, ModuleNameSubSection, NameSubSection, Section, StartSection, Table, TableExportDesc, TableImportDesc, TableNameSubSection, TableSection, TypeNameSubSection, TypeSection, Element, Code, Local, Data, NameMap, IndirectNameAssociation, IndirectNameMap, NameMapSubSection } from './Section';
+import { combin, decodeObject, decodeUint, encodeObject, Offset } from './encode';
 import { Env } from './Env';
 import { Func } from './Func';
 import { bufferToInstr } from './Instruction';
+import { Module } from './Module';
+import { Code, CodeSection, CustomSection, Data, DataNameSubSection, DataSection, Element, ElementNameSubSection, ElementSection, Export, ExportSection, FunctionExportDesc, FunctionImportDesc, FunctionNameSubSection, FunctionSection, FunctionType, Global, GlobalExportDesc, GlobalImportDesc, GlobalNameSubSection, GlobalSection, Import, ImportSection, IndirectNameAssociation, IndirectNameMap, InitedGlobal, LabelNameSubSection, Local, LocalNameSubSection, Memory, MemoryExportDesc, MemoryImportDesc, MemoryNameSubSection, MemorySection, ModuleNameSubSection, NameMap, NameMapSubSection, NameSubSection, Section, StartSection, Table, TableExportDesc, TableImportDesc, TableNameSubSection, TableSection, TypeNameSubSection, TypeSection } from './Section';
+import { ElementType, FunctionOption, ImportExportType, isSameType, NameType, SectionType, Type, TypeOption } from './Type';
 
 /**
  * 内用模块
  */
-
 export class InnerModule {
+    /**
+     * 魔数："\0asm"
+     */
     static magic = new Uint8Array([0x00, 0x61, 0x73, 0x6D]);
+    /**
+     * 版本：1
+     */
     static version = new Uint8Array([0x01, 0x00, 0x00, 0x00]);
 
+    /**
+     * @param sections 模块的各个数据段
+     */
     private constructor(private sections: Section[]) { }
+
+    /**
+     * 读取缓存生成InnerModule
+     * @param buffer 缓存
+     */
     static fromBuffer(buffer: ArrayBuffer): InnerModule {
         let offset: Offset = { value: 0 };
 
@@ -32,7 +45,13 @@ export class InnerModule {
         }
         return new InnerModule(sections);
     }
-    private static getTypeSection(module: Module, env: Env): TypeSection | undefined {
+
+    /**
+     * 生成类型段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createTypeSection(module: Module, env: Env): TypeSection | undefined {
         if (!env.types.length) return;
         let functionTypes = env.types.map(it => {
             let type = new FunctionType();
@@ -44,7 +63,13 @@ export class InnerModule {
         res.functionTypes = functionTypes;
         return res;
     }
-    private static getImportSection(module: Module, env: Env): ImportSection | undefined {
+
+    /**
+     * 生成引入段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createImportSection(module: Module, env: Env): ImportSection | undefined {
         if (!module.import.length) return;
         let imports = module.import.map((it) => {
             let imp = new Import();
@@ -96,7 +121,13 @@ export class InnerModule {
         res.imports = imports;
         return res;
     }
-    private static getFunctionSection(module: Module, env: Env): FunctionSection | undefined {
+
+    /**
+     * 生成函数段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createFunctionSection(module: Module, env: Env): FunctionSection | undefined {
         if (!module.function.length) return;
         let typeIndexes = module.function.map(it => {
             let type = it.getType();
@@ -107,7 +138,13 @@ export class InnerModule {
         res.typeIndexes = typeIndexes;
         return res;
     }
-    private static getTableSection(module: Module, env: Env): TableSection | undefined {
+
+    /**
+     * 生成表格段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createTableSection(module: Module, env: Env): TableSection | undefined {
         if (!module.table.length) return;
         let tables = module.table.map(it => {
             let table = new Table();
@@ -124,7 +161,13 @@ export class InnerModule {
         res.tables = tables;
         return res;
     }
-    private static getMemorySection(module: Module, env: Env): MemorySection | undefined {
+
+    /**
+     * 生成内存段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createMemorySection(module: Module, env: Env): MemorySection | undefined {
         if (!module.memory.length) return;
         let memories = module.memory.map(it => {
             let memory = new Memory();
@@ -140,7 +183,13 @@ export class InnerModule {
         res.memories = memories;
         return res;
     }
-    private static getGlobalSection(module: Module, env: Env): GlobalSection | undefined {
+
+    /**
+     * 生成全局变量段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createGlobalSection(module: Module, env: Env): GlobalSection | undefined {
         if (!module.global.length) return;
         let globals = module.global.map(it => {
             let global = new InitedGlobal();
@@ -153,7 +202,13 @@ export class InnerModule {
         res.globals = globals;
         return res;
     }
-    private static getExportSection(module: Module, env: Env): ExportSection | undefined {
+
+    /**
+     * 生成导出段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createExportSection(module: Module, env: Env): ExportSection | undefined {
         if (!module.export.length) return;
         let exports = module.export.map(it => {
             let exp = new Export();
@@ -189,13 +244,25 @@ export class InnerModule {
         res.exports = exports;
         return res;
     }
-    private static getStartSection(module: Module, env: Env): StartSection | undefined {
+
+    /**
+     * 生成开始段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createStartSection(module: Module, env: Env): StartSection | undefined {
         if (!module.start) return;
         let res = new StartSection();
         res.functionIndex = env.findFunctionIndex(module.start)!;
         return res;
     }
-    private static getElementSection(module: Module, env: Env): ElementSection | undefined {
+
+    /**
+     * 生成元素段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createElementSection(module: Module, env: Env): ElementSection | undefined {
         if (!module.element.length) return;
         let elements = module.element.map(it => {
             let elemet = new Element();
@@ -208,11 +275,17 @@ export class InnerModule {
         res.elements = elements;
         return res;
     }
-    private static getCodeSection(module: Module, env: Env): CodeSection | undefined {
+
+    /**
+     * 生成代码段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createCodeSection(module: Module, env: Env): CodeSection | undefined {
         if (!module.function.length) return;
         let codes = module.function.map(it => {
             let code = new Code();
-            let locals = it.getLocalTypes().map(it => {
+            let locals = it.getLocalTypesAndCount().map(it => {
                 let local = new Local();
                 local.count = it.count;
                 local.type = it.type;
@@ -226,7 +299,13 @@ export class InnerModule {
         res.codes = codes;
         return res;
     }
-    private static getDataSection(module: Module, env: Env): DataSection | undefined {
+
+    /**
+     * 生成数据段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createDataSection(module: Module, env: Env): DataSection | undefined {
         if (!module.data.length) return;
         let datas = module.data.map(it => {
             let data = new Data();
@@ -239,7 +318,13 @@ export class InnerModule {
         res.datas = datas;
         return res;
     }
-    private static getCustomSection(module: Module, env: Env): CustomSection | undefined {
+
+    /**
+     * 生成名称段
+     * @param module 模块
+     * @param env 环境上下文
+     */
+    private static createNameSection(module: Module, env: Env): CustomSection | undefined {
         let nameSection = NameSection.fromModule(module);
         let res = new CustomSection();
         res.name = "name";
@@ -247,25 +332,34 @@ export class InnerModule {
         return res;
     }
 
+    /**
+     * 生成InnerModule
+     * @param module 模块
+     * @param env 环境上下文
+     */
     static fromModule(module: Module, env: Env): InnerModule {
         let sections: (Section | undefined)[] = [
-            this.getTypeSection(module, env),
-            this.getImportSection(module, env),
-            this.getFunctionSection(module, env),
-            this.getTableSection(module, env),
-            this.getMemorySection(module, env),
-            this.getGlobalSection(module, env),
-            this.getExportSection(module, env),
-            this.getStartSection(module, env),
-            this.getElementSection(module, env),
-            this.getCodeSection(module, env),
-            this.getDataSection(module, env),
-            this.getCustomSection(module, env)
+            this.createTypeSection(module, env),
+            this.createImportSection(module, env),
+            this.createFunctionSection(module, env),
+            this.createTableSection(module, env),
+            this.createMemorySection(module, env),
+            this.createGlobalSection(module, env),
+            this.createExportSection(module, env),
+            this.createStartSection(module, env),
+            this.createElementSection(module, env),
+            this.createCodeSection(module, env),
+            this.createDataSection(module, env),
+            this.createNameSection(module, env)
         ];
         let secs = sections.filter(it => it) as Section[];
         let res = new InnerModule(secs);
         return res;
     }
+
+    /**
+     * 转换成为缓存
+     */
     toBuffer(): ArrayBuffer {
         let res: ArrayBuffer[] = [
             InnerModule.magic,
@@ -277,6 +371,12 @@ export class InnerModule {
         }
         return combin(res);
     }
+
+    /**
+     * 转换为Module
+     * @param module 模块
+     * @param env 环境上下文
+     */
     toModule(): Module {
         let [customSec] = this.getCustomSections("name") as [CustomSection?];
         let nameSec = customSec?.toNameSection();
@@ -329,12 +429,23 @@ export class InnerModule {
 
         return module;
     }
+
+    /**
+     * 通过名称子段，设置数组中元素的名称
+     * @param arr 数组
+     * @param subSection 名称子段
+     */
     private setNamesOf(arr: { name?: string }[], subSection: NameMapSubSection | undefined) {
         for (let { index, name } of subSection?.names ?? []) {
             arr[index].name = name;
         }
     }
 
+    /**
+     * 生成模块的所有函数
+     * @param nameSec 名称段
+     * @param typeOptions 模块的所有类型
+     */
     private getFunctions(nameSec: NameSection | undefined, typeOptions: TypeOption[] | undefined): Func[] {
         let types = this.typeSection?.functionTypes ?? [];
         let typeIndexes = this.functionSection?.typeIndexes ?? [];
@@ -378,6 +489,11 @@ export class InnerModule {
         return options.map(opt => new Func(opt));
     }
 
+    /**
+     * 检查magic
+     * @param buffer 缓存
+     * @param offset 偏移
+     */
     private static checkMagic(buffer: ArrayBuffer, offset: Offset) {
         let length = InnerModule.magic.byteLength;
         let view = new Uint8Array(buffer);
@@ -387,6 +503,12 @@ export class InnerModule {
         }
         offset.value += length;
     }
+
+    /**
+     * 检查版本
+     * @param buffer 缓存
+     * @param offset 偏移
+     */
     private static checkVersion(buffer: ArrayBuffer, offset: Offset) {
         let length = InnerModule.version.byteLength;
         let view = new Uint8Array(buffer);
@@ -396,12 +518,23 @@ export class InnerModule {
         }
         offset.value += length;
     }
+
+    /**
+     * 预判段的类型，不会修改offset
+     * @param buffer 
+     * @param offset 
+     */
     private static getSectionType(buffer: ArrayBuffer, offset: Offset) {
         let org = offset.value;
         let type: SectionType = decodeUint(buffer, offset);
         offset.value = org;
         return type;
     }
+
+    /**
+     * 获取对应名称的自定义段
+     * @param name 名称
+     */
     getCustomSections(name?: string): CustomSection[] {
         let secArr = this.sections.filter(it => it.type === SectionType.CustomSection) as CustomSection[];
         if (name !== undefined) {
@@ -412,7 +545,9 @@ export class InnerModule {
     }
 }
 
-
+/**
+ * 段类型 -> 段构造函数
+ */
 export let sectionMap = {
     [SectionType.CustomSection]: CustomSection,
     [SectionType.TypeSection]: TypeSection,
@@ -429,19 +564,53 @@ export let sectionMap = {
 }
 
 export interface InnerModule {
+    /**
+     * 类型段
+     */
     readonly typeSection?: TypeSection;
+    /**
+     * 引入段
+     */
     readonly importSection?: ImportSection;
+    /**
+     * 函数段
+     */
     readonly functionSection?: FunctionSection;
+    /**
+     * 表格段
+     */
     readonly tableSection?: TableSection;
+    /**
+     * 内存段
+     */
     readonly memorySection?: MemorySection;
+    /**
+     * 全局变量段
+     */
     readonly globalSection?: GlobalSection;
+    /**
+     * 导出段
+     */
     readonly exportSection?: ExportSection;
+    /**
+     * 开始段
+     */
     readonly startSection?: StartSection;
+    /**
+     * 元素段
+     */
     readonly elementSection?: ElementSection;
+    /**
+     * 代码段
+     */
     readonly codeSection?: CodeSection;
+    /**
+     * 数据段
+     */
     readonly dataSection?: DataSection;
 }
 {
+    // 给上面的每个段设置setter
     let keys = [
         "typeSection",
         "importSection",
@@ -473,19 +642,26 @@ export interface InnerModule {
  * 名称段
  */
 export class NameSection {
+    /**
+     * @param subSections 名称子段
+     */
     private constructor(private subSections: NameSubSection[]) { }
+    /**
+     * 有模块生成名称段
+     * @param module 模块
+     */
     static fromModule(module: Module): NameSection {
         let secs = [
-            this.getModuleNameSubSection(module),
-            this.getNameSubSection(module, "function"),
-            this.getLocalNameSubSection(module),
-            this.getLabelNameSubSection(module),
-            this.getNameSubSection(module, "type"),
-            this.getNameSubSection(module, "table"),
-            this.getNameSubSection(module, "memory"),
-            this.getNameSubSection(module, "global"),
-            this.getNameSubSection(module, "element"),
-            this.getNameSubSection(module, "data")
+            this.createModuleNameSubSection(module),
+            this.createNameSubSection(module, "function"),
+            this.createLocalNameSubSection(module),
+            this.createLabelNameSubSection(module),
+            this.createNameSubSection(module, "type"),
+            this.createNameSubSection(module, "table"),
+            this.createNameSubSection(module, "memory"),
+            this.createNameSubSection(module, "global"),
+            this.createNameSubSection(module, "element"),
+            this.createNameSubSection(module, "data")
         ];
 
         let subSections = secs.filter(it => it) as NameSubSection[];
@@ -493,7 +669,11 @@ export class NameSection {
         return new NameSection(subSections);
     }
 
-    private static getModuleNameSubSection(module: Module): ModuleNameSubSection | undefined {
+    /**
+     * 生成模块名子段
+     * @param module 模块
+     */
+    private static createModuleNameSubSection(module: Module): ModuleNameSubSection | undefined {
         if (module.name) {
             let sec = new ModuleNameSubSection();
             sec.name = module.name;
@@ -501,7 +681,11 @@ export class NameSection {
         }
     }
 
-    private static getLocalNameSubSection(module: Module): LocalNameSubSection | undefined {
+    /**
+     * 生成局部变量名称子段
+     * @param module 模块
+     */
+    private static createLocalNameSubSection(module: Module): LocalNameSubSection | undefined {
         let associations: IndirectNameAssociation[] = [];
         for (let functionIndex = 0; functionIndex < module.function.length; functionIndex++) {
             let func = module.function[functionIndex];
@@ -534,7 +718,11 @@ export class NameSection {
         }
     }
 
-    private static getLabelNameSubSection(module: Module): LabelNameSubSection | undefined {
+    /**
+     * 生成标签名称子段
+     * @param module 模块
+     */
+    private static createLabelNameSubSection(module: Module): LabelNameSubSection | undefined {
         let associations: IndirectNameAssociation[] = [];
         for (let functionIndex = 0; functionIndex < module.function.length; functionIndex++) {
             let func = module.function[functionIndex];
@@ -565,7 +753,12 @@ export class NameSection {
         }
     }
 
-    private static getNameSubSection(module: Module, type: "function" | "type" | "table" | "memory" | "global" | "element" | "data"): NameSubSection | undefined {
+    /**
+     * 生成名称子段
+     * @param module 模块
+     * @param type 子段类型
+     */
+    private static createNameSubSection(module: Module, type: "function" | "type" | "table" | "memory" | "global" | "element" | "data"): NameSubSection | undefined {
         let map: Record<string, [new () => NameSubSection & { names: NameMap[] }, ImportExportType?]> = {
             "function": [FunctionNameSubSection, ImportExportType.Function],
             "table": [TableNameSubSection, ImportExportType.Table],
@@ -602,6 +795,10 @@ export class NameSection {
         }
     }
 
+    /**
+     * 由缓存生成NameSection
+     * @param buffer 缓存
+     */
     static fromBuffer(buffer: ArrayBuffer): NameSection {
         let offset: Offset = { value: 0 };
 
@@ -617,12 +814,21 @@ export class NameSection {
         return new NameSection(subSections);
     }
 
+    /**
+     * 预读子段类型，不会修改offset
+     * @param buffer 缓存
+     * @param offset 偏移
+     */
     private static getSubSectionType(buffer: ArrayBuffer, offset: Offset) {
         let org = offset.value;
         let type: NameType = decodeUint(buffer, offset);
         offset.value = org;
         return type;
     }
+
+    /**
+     * 转换为缓存
+     */
     toBuffer(): ArrayBuffer {
         let res: ArrayBuffer[] = [];
         for (let it of this.subSections) {
@@ -631,6 +837,10 @@ export class NameSection {
         }
         return combin(res);
     }
+
+    /**
+     * 转换为自定义段
+     */
     toCustomSection(): CustomSection {
         let res = new CustomSection();
         res.name = "name";
@@ -640,19 +850,52 @@ export class NameSection {
 }
 
 export interface NameSection {
+    /**
+     * 模块名子段
+     */
     readonly moduleNameSubSection?: ModuleNameSubSection;
+    /**
+     * 函数名子段
+     */
     readonly functionNameSubSection?: FunctionNameSubSection;
+    /**
+     * 局部变量名子段
+     */
     readonly localNameSubSection?: LocalNameSubSection;
+    /**
+     * 标签名子段
+     */
     readonly labelNameSubSection?: LabelNameSubSection;
+    /**
+     * 类型名子段
+     */
     readonly typeNameSubSection?: TypeNameSubSection;
+    /**
+     * 表格名子段
+     */
     readonly tableNameSubSection?: TableNameSubSection;
+    /**
+     * 内存名子段
+     */
     readonly memoryNameSubSection?: MemoryNameSubSection;
+    /**
+     * 全局变量名子段
+     */
     readonly globalNameSubSection?: GlobalNameSubSection;
+    /**
+     * 元素名子段
+     */
     readonly elementNameSubSection?: ElementNameSubSection;
+    /**
+     * 数据名子段
+     */
     readonly dataNameSubSection?: DataNameSubSection;
 }
 
-export let subSectionMap = {
+/**
+ * 子段类型 -> 子段构造函数
+ */
+let subSectionMap = {
     [NameType.Module]: ModuleNameSubSection,
     [NameType.Function]: FunctionNameSubSection,
     [NameType.Local]: LocalNameSubSection,
@@ -665,6 +908,7 @@ export let subSectionMap = {
     [NameType.Data]: DataNameSubSection,
 };
 {
+    // 设置 NameSection 中每个子段的 getter
     let keys = [
         "moduleNameSubSection",
         "functionNameSubSection",

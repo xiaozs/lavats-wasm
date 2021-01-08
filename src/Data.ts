@@ -3,7 +3,10 @@ import { F32, F64, I16, I32, I64, I8, isF32, isF64, isI16, isI32, isI64, isI8, i
 
 let te = new TextEncoder();
 
-enum DataType {
+/**
+ * 数据类型
+ */
+export enum DataType {
     I8,
     I16,
     I32,
@@ -15,8 +18,20 @@ enum DataType {
     String,
 }
 
-type DataItem =
-    | { type: DataType.I8, val: I8[] }
+/**
+ * 数据对象
+ */
+export type DataItem =
+    | {
+        /**
+         * 数据类型
+         */
+        type: DataType.I8,
+        /**
+         * 数据内容
+         */
+        val: I8[]
+    }
     | { type: DataType.I16, val: I16[] }
     | { type: DataType.I32, val: I32[] }
     | { type: DataType.I64, val: I64[] }
@@ -26,21 +41,27 @@ type DataItem =
     | { type: DataType.Buffer, val: ArrayBuffer }
     | { type: DataType.String, val: string }
 
-class MyBigInt64Array {
+/**
+ * 用于处理i64位数的ArrayBuffer
+ */
+class Int64Array {
     constructor(vals: (number | bigint)[]) {
         vals = vals.map(it => BigInt(it));
         return new BigInt64Array(vals as bigint[]);
     }
 }
-interface MyBigInt64Array extends ArrayBuffer { }
+interface Int64Array extends ArrayBuffer { }
 
+/**
+ * 用于处理V128位数的ArrayBuffer
+ */
 class V128Array {
     constructor(vals: V128[]) {
         let map = {
             "v8x16": Int8Array,
             "v16x8": Int16Array,
             "v32x4": Int32Array,
-            "v64x2": MyBigInt64Array,
+            "v64x2": Int64Array,
         }
 
         let buffers: ArrayBuffer[] = [];
@@ -54,17 +75,20 @@ class V128Array {
 }
 interface V128Array extends ArrayBuffer { }
 
-class InitData {
-    private datas: DataItem[] = [];
-    constructor(data: DataItem) {
-        this.datas.push(data);
-    }
+/**
+ * 数据包装器
+ */
+class DataPacker {
+    /**
+     * @param datas 包裹的数据
+     */
+    constructor(private datas: DataItem[]) { }
     toBuffer() {
         let map = {
             [DataType.I8]: Int8Array,
             [DataType.I16]: Int16Array,
             [DataType.I32]: Int32Array,
-            [DataType.I64]: MyBigInt64Array,
+            [DataType.I64]: Int64Array,
             [DataType.F32]: Float32Array,
             [DataType.F64]: Float64Array,
             [DataType.V128]: V128Array,
@@ -84,45 +108,129 @@ class InitData {
         }
         return combin(buffers);
     }
+
+    /**
+     * 增加一个缓存
+     * @param val 缓存
+     */
     buffer(val: ArrayBuffer) {
         this.datas.push({ type: DataType.Buffer, val });
         return this;
     }
+    /**
+     * 增加一个字符串
+     * @param val 字符串
+     */
     string(val: string) {
         this.datas.push({ type: DataType.String, val });
         return this;
     }
 }
 
+/**
+ * 包裹数据的方法
+ * @param datas 包裹的数据
+ */
+export function data(datas: DataItem[]) {
+    return new DataPacker(datas)
+}
+
 export namespace data {
+    /**
+     * 增加一个缓存
+     * @param val 缓存
+     */
     export function buffer(val: ArrayBuffer) {
-        return new InitData({ type: DataType.Buffer, val });
+        return new DataPacker([{ type: DataType.Buffer, val }]);
     }
+    /**
+     * 增加一个字符串
+     * @param val 字符串
+     */
     export function string(val: string) {
-        return new InitData({ type: DataType.String, val });
+        return new DataPacker([{ type: DataType.String, val }]);
     }
 }
 
-interface InitData {
-    i8(...val: I8[]): InitData;
-    i16(...val: I16[]): InitData;
-    i32(...val: I32[]): InitData;
-    i64(...val: I64[]): InitData;
-    f32(...val: F32[]): InitData;
-    f64(...val: F64[]): InitData;
-    v128(...val: V128[]): InitData;
+interface DataPacker {
+    /**
+     * 增加一组i8
+     * @param val i8
+     */
+    i8(...val: I8[]): DataPacker;
+    /**
+     * 增加一组i16
+     * @param val i16
+     */
+    i16(...val: I16[]): DataPacker;
+    /**
+     * 增加一组i32
+     * @param val i32
+     */
+    i32(...val: I32[]): DataPacker;
+    /**
+     * 增加一组i64
+     * @param val i64
+     */
+    i64(...val: I64[]): DataPacker;
+    /**
+     * 增加一组f32
+     * @param val f32
+     */
+    f32(...val: F32[]): DataPacker;
+    /**
+     * 增加一组f64
+     * @param val f64
+     */
+    f64(...val: F64[]): DataPacker;
+    /**
+     * 增加一组v128
+     * @param val v128
+     */
+    v128(...val: V128[]): DataPacker;
 }
 
 export declare namespace data {
-    export function i8(...val: I8[]): InitData;
-    export function i16(...val: I16[]): InitData;
-    export function i32(...val: I32[]): InitData;
-    export function i64(...val: I64[]): InitData;
-    export function f32(...val: F32[]): InitData;
-    export function f64(...val: F64[]): InitData;
-    export function v128(...val: V128[]): InitData;
+    /**
+     * 增加一组i8
+     * @param val i8
+     */
+    export function i8(...val: I8[]): DataPacker;
+    /**
+     * 增加一组i16
+     * @param val i16
+     */
+    export function i16(...val: I16[]): DataPacker;
+    /**
+     * 增加一组i32
+     * @param val i32
+     */
+    export function i32(...val: I32[]): DataPacker;
+    /**
+     * 增加一组i64
+     * @param val i64
+     */
+    export function i64(...val: I64[]): DataPacker;
+    /**
+     * 增加一组f32
+     * @param val f32
+     */
+    export function f32(...val: F32[]): DataPacker;
+    /**
+     * 增加一组f64
+     * @param val f64
+     */
+    export function f64(...val: F64[]): DataPacker;
+    /**
+     * 增加一组v128
+     * @param val v128
+     */
+    export function v128(...val: V128[]): DataPacker;
 }
 
+/**
+ * 方法名称 -> [数据类型, 校验方法] 的映射
+ */
 const map: Record<string, [DataType, (val: any) => boolean]> = {
     "i8": [DataType.I8, isI8],
     "i16": [DataType.I16, isI16],
@@ -133,9 +241,10 @@ const map: Record<string, [DataType, (val: any) => boolean]> = {
     "v128": [DataType.V128, isV128],
 }
 
+// 给DataPacker类添加方法
 for (let key in map) {
     let [type, fn] = map[key];
-    (InitData.prototype as any)[key] = function (...val: any[]) {
+    (DataPacker.prototype as any)[key] = function (...val: any[]) {
         for (let i = 0; i < val.length; i++) {
             let it = val[i];
             if (!fn(it)) throw new Error(`data ${i}: 不是${key}`);
@@ -145,6 +254,7 @@ for (let key in map) {
     }
 }
 
+// 给data名称空间添加方法
 for (let key in map) {
     let [type, fn] = map[key];
     (data as any)[key] = function (...val: any[]) {
@@ -152,6 +262,6 @@ for (let key in map) {
             let it = val[i];
             if (!fn(it)) throw new Error(`data ${i}: 不是${key}`);
         }
-        return new InitData({ type, val } as DataItem);
+        return new DataPacker([{ type, val }] as DataItem[]);
     }
 }

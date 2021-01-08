@@ -3,9 +3,12 @@ import type { Env } from "./Env";
 import type { Func } from "./Func";
 import type { NameMap } from './Section';
 import { Stack } from './Stack';
-import { BlockOption, BlockType, blockTypeMap, CheckOption, FormatOption, IfOption, ImmediateType, Index, IndexType, InstructionOption, isSameType, NormalInstructionOption, SpecialInstructionOption, ToBufferOption, Type, TypeOption, U32 } from './Type';
+import { BlockOption, blockTypeMap, CheckOption, FormatOption, IfOption, ImmediateType, Index, IndexType, InstructionOption, isSameType, NormalInstructionOption, SpecialInstructionOption, ToBufferOption, Type, TypeOption, U32 } from './Type';
 import { expandInstr, flatInstr, flatItem, itemName, typeToString } from './utils';
 
+/**
+ * 指令配置
+ */
 type InstrsOption = (Omit<NormalInstructionOption, "code"> | Omit<SpecialInstructionOption, "code">) & { code: number[] };
 
 /**
@@ -455,6 +458,11 @@ export class Instruction {
             opt.stack.push(...this.instrOption.results);
         }
     }
+
+    /**
+     * 索引型立即数转换为缓存
+     * @param opt 序列化配置项
+     */
     private immediateIndexesToBuffer(opt: ToBufferOption) {
         let buffers: ArrayBuffer[] = [];
         let immTypes = this.instrOption.immediateTypes;
@@ -475,6 +483,12 @@ export class Instruction {
         return combin(buffers);
     }
 
+    /**
+     * 索引转化为缓存
+     * @param type 索引类型
+     * @param opt 序列化配置项
+     * @param index 索引
+     */
     private indexToBuffer(type: IndexType, opt: ToBufferOption, index: Index): ArrayBuffer {
         if (type === IndexType.Label) {
             let num = opt.block.findLabelIndex(index);
@@ -488,6 +502,9 @@ export class Instruction {
         }
     }
 
+    /**
+     * 普通立即数转换为缓存
+     */
     private normalImmediatesToBuffer() {
         let map: any = {
             [ImmediateType.I32]: encodeInt,
@@ -510,6 +527,10 @@ export class Instruction {
         return combin(buffers);
     }
 
+    /**
+     * 转换为缓存
+     * @param opt 序列化配置项
+     */
     toBuffer(opt: ToBufferOption): ArrayBuffer {
         let isIndex = this.instrOption.immediateIndexTypes?.length;
         let code = this.instrOption.code;
@@ -519,6 +540,10 @@ export class Instruction {
         return combin([code, imms]);
     }
 
+    /**
+     * 转换为wat字符串
+     * @param option 格式化配置
+     */
     toString(option: Required<FormatOption>): string {
         let imms: (Index | any)[] = [];
         for (let i = 0; i < this.immediates.length; i++) {
@@ -547,17 +572,24 @@ export class Instruction {
         }
         return flatInstr(this.instrOption.name, ...imms);
     }
+
+    /**
+     * 将指令中的索引型立即数转换为名称
+     * @param env 环境上下文
+     * @param block 块的代理
+     * @param func 函数
+     */
     setImmediateIndexToName(env: Env, block: BlockProxy, func: Func) {
         let indexTypes = this.instrOption.immediateIndexTypes;
         if (indexTypes?.length) {
             let map = {
-                [IndexType.Function]: (imm: Index) => env.functionIndexToName(imm),
-                [IndexType.Table]: (imm: Index) => env.tableIndexToName(imm),
-                [IndexType.Memory]: (imm: Index) => env.memoryIndexToName(imm),
-                [IndexType.Global]: (imm: Index) => env.globalIndexToName(imm),
-                [IndexType.Type]: (imm: Index) => env.typeIndexToName(imm),
-                [IndexType.Label]: (imm: Index) => block.labelIndexToName(imm),
-                [IndexType.Local]: (imm: Index) => func.localIndexToName(imm),
+                [IndexType.Function]: (imm: Index) => env.findFunctionName(imm),
+                [IndexType.Table]: (imm: Index) => env.findTableName(imm),
+                [IndexType.Memory]: (imm: Index) => env.findMemoryName(imm),
+                [IndexType.Global]: (imm: Index) => env.findGlobalName(imm),
+                [IndexType.Type]: (imm: Index) => env.findTypeName(imm),
+                [IndexType.Label]: (imm: Index) => block.findlabelName(imm),
+                [IndexType.Local]: (imm: Index) => func.findLocalName(imm),
             }
 
             let newImms: any[] = [];
@@ -579,6 +611,9 @@ export class Instruction {
         }
     }
 
+    /**
+     * 获取块的签名
+     */
     getBlockTypes(): TypeOption[] {
         return [];
     }
@@ -588,7 +623,12 @@ export class Instruction {
  * 块类型指令
  */
 export abstract class BlockInstruction extends Instruction {
-    protected getTypeString(type: TypeOption): string {
+
+    /**
+     * 获取块类型的wat字符串
+     */
+    protected getTypeString(): string {
+        let type = this.type;
         let params = type.params?.length ? flatItem("param", ...type.params.map(it => typeToString(it))) : "";
         let results = type.results?.length ? flatItem("result", ...type.results.map(it => typeToString(it))) : "";
         return flatInstr(params, results);
@@ -642,6 +682,9 @@ export abstract class BlockInstruction extends Instruction {
      */
     abstract get type(): TypeOption;
 
+    /**
+     * 获取块内的所有标签名称
+     */
     abstract getLables(): (string | undefined)[];
 
     abstract toString(option: Required<FormatOption>): string;
@@ -668,9 +711,15 @@ export abstract class NormalBlockInstruction extends BlockInstruction {
     get label() {
         return this.blockOption.label;
     }
+
     get type() {
         return this.blockOption.type ?? {};
     }
+
+    /**
+     * 检查指令类型是否和栈匹配，否则抛出异常
+     * @param opt 检查配置项
+     */
     check(opt: Omit<CheckOption, "immediates">) {
         let type = this.type;
 
@@ -680,6 +729,7 @@ export abstract class NormalBlockInstruction extends BlockInstruction {
 
         opt.stack.push(...type.results ?? []);
     }
+
     toBuffer(opt: ToBufferOption): ArrayBuffer {
         opt = {
             ...opt,
@@ -693,6 +743,7 @@ export abstract class NormalBlockInstruction extends BlockInstruction {
             instructionSet["end"].code
         ]);
     }
+
     getLables(): (string | undefined)[] {
         let res: (string | undefined)[] = [];
 
@@ -705,24 +756,27 @@ export abstract class NormalBlockInstruction extends BlockInstruction {
 
         return res;
     }
+
     toString(option: Required<FormatOption>): string {
         return expandInstr({
             option,
             header: [
                 this.instrOption.name,
                 itemName(this.blockOption.label),
-                this.getTypeString(this.type),
+                this.getTypeString(),
             ],
             body: this.blockOption.codes?.map(it => it.toString(option)) ?? [],
             end: "end"
         })
     }
+
     setImmediateIndexToName(env: Env, block: BlockProxy, func: Func) {
         for (let code of this.blockOption.codes ?? []) {
             block = block.createSubBlock(this);
             code.setImmediateIndexToName(env, block, func);
         }
     }
+
     getBlockTypes(): TypeOption[] {
         let type = this.isBaseBlockType() ? [] : [this.type];
         let subBlockTypes = (this.blockOption.codes ?? []).flatMap(it => it.getBlockTypes());
@@ -751,15 +805,22 @@ export class LoopBlock extends NormalBlockInstruction {
  * If指令
  */
 export class IfBlock extends BlockInstruction {
+
     get label() {
         return this.blockOption.label;
     }
+
     get type() {
         return this.blockOption.type ?? {};
     }
+
+    /**
+     * @param blockOption if块的配置项
+     */
     constructor(private blockOption: IfOption) {
         super(instructionSet["if"], [blockOption.type]);
     }
+
     check(opt: Omit<CheckOption, "immediates">) {
         let type = this.type;
 
@@ -774,6 +835,7 @@ export class IfBlock extends BlockInstruction {
 
         opt.stack.push(...type.results ?? []);
     }
+
     toBuffer(opt: ToBufferOption): ArrayBuffer {
         opt = {
             ...opt,
@@ -799,6 +861,7 @@ export class IfBlock extends BlockInstruction {
             ]);
         }
     }
+
     getLables(): (string | undefined)[] {
         let res: (string | undefined)[] = [];
 
@@ -816,11 +879,12 @@ export class IfBlock extends BlockInstruction {
 
         return res;
     }
+
     toString(option: Required<FormatOption>): string {
         let header = [
             this.instrOption.name,
             itemName(this.blockOption.label),
-            this.getTypeString(this.type),
+            this.getTypeString(),
         ];
 
         let thenContent = this.blockOption.then?.map(it => it.toString(option)) ?? [];
@@ -851,6 +915,7 @@ export class IfBlock extends BlockInstruction {
             })
         }
     }
+
     setImmediateIndexToName(env: Env, block: BlockProxy, func: Func) {
         block = block.createSubBlock(this);
 
@@ -861,6 +926,7 @@ export class IfBlock extends BlockInstruction {
             code.setImmediateIndexToName(env, block, func);
         }
     }
+
     getBlockTypes(): TypeOption[] {
         let type = this.isBaseBlockType() ? [] : [this.type];
         let thenBlockTypes = (this.blockOption.then ?? []).flatMap(it => it.getBlockTypes());
@@ -877,7 +943,12 @@ export class IfBlock extends BlockInstruction {
  * 块用于检查时候的代理
  */
 export class BlockProxy {
-    labelIndexToName(idx: Index): Index {
+
+    /**
+     * 通过索引，查找标签名称
+     * @param idx 
+     */
+    findlabelName(idx: Index): Index {
         if (typeof idx === "string") {
             return idx;
         } else {
@@ -890,6 +961,11 @@ export class BlockProxy {
         }
     }
 
+    /**
+     * 通过索引，查找BlockProxy
+     * @param idx 索引
+     * @param currentIndex 开始的索引
+     */
     private getBlockByIndex(idx: U32, currentIndex = 0): BlockProxy | undefined {
         if (idx === currentIndex) return this;
         return this.parent?.getBlockByIndex(idx, currentIndex + 1);
@@ -985,6 +1061,12 @@ export class BlockProxy {
     }
 }
 
+/**
+ * 判断 buffer 在 offset 处是否以 otherBuffer 开头
+ * @param buffer 缓存
+ * @param offset 偏移
+ * @param otherBuffer 另一个缓存
+ */
 function isStartWith(buffer: Uint8Array, offset: Offset, otherBuffer: ArrayBuffer) {
     let ob = new Uint8Array(otherBuffer);
     for (let i = 0; i < ob.length; i++) {
@@ -993,6 +1075,10 @@ function isStartWith(buffer: Uint8Array, offset: Offset, otherBuffer: ArrayBuffe
     return true;
 }
 
+
+/**
+ * 立即数类型 -> 编码方式
+ */
 let map = {
     [ImmediateType.I32]: decodeUint,
     [ImmediateType.I64]: decodeUint,
@@ -1004,12 +1090,21 @@ let map = {
     [ImmediateType.Index]: decodeUint,
 }
 
+/**
+ * 块指令名称 -> 块指令构造函数
+ */
 let blockMap: Record<string, new (opt: any) => BlockInstruction> = {
     "block": Block,
     "loop": LoopBlock,
     "if": IfBlock,
 }
 
+/**
+ * 从缓存中生成对应的指令
+ * @param buffer 缓存
+ * @param labelNames 标签名
+ * @param typeOptions 所有类型
+ */
 export function bufferToInstr(buffer: ArrayBuffer, labelNames: NameMap[] = [], typeOptions: TypeOption[] = []): Instruction[] {
     let view = new Uint8Array(buffer);
     let instrs: Instruction[] = [];

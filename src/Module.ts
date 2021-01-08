@@ -247,16 +247,29 @@ export class Module {
             if (!memory) throw new Error(`data ${i}: 没找到memory ${it.memoryIndex}`);
         }
     }
+
+    /**
+     * 转换为缓存
+     */
     toBuffer() {
         this.check();
         let env = new Env(this.option);
         let inner = InnerModule.fromModule(this, env);
         return inner.toBuffer();
     }
+
+    /**
+     * 通过缓存生成Module
+     * @param buffer 缓存
+     */
     static fromBuffer(buffer: ArrayBuffer) {
         return InnerModule.fromBuffer(buffer);
     }
 
+    /**
+     * 转换为wat字符串
+     * @param opt 格式化配置
+     */
     toString(opt?: FormatOption) {
         this.check();
         let defaultOpt: Required<FormatOption> = {
@@ -287,6 +300,9 @@ export class Module {
         })
     }
 
+    /**
+     * 转换类型为字符串
+     */
     private typeToString(): string[] {
         return this.type.map(it => {
             let params = it.params?.length ? flatItem("param", ...it.params.map(it => typeToString(it))) : "";
@@ -296,6 +312,9 @@ export class Module {
         })
     }
 
+    /**
+     * 转换全局变量为字符串
+     */
     private globalToString(): string[] {
         return this.global.map(it => {
             let type = typeToString(it.valueType);
@@ -305,6 +324,9 @@ export class Module {
         });
     }
 
+    /**
+     * 转换引入为字符串
+     */
     private importToString(): string[] {
         return this.import.map(it => {
             let content: string;
@@ -333,9 +355,17 @@ export class Module {
             return flatItem("import", ImportExportName(it.module), ImportExportName(it.importName), content);
         })
     }
+
+    /**
+     * 转换内存为字符串
+     */
     private memoryToString(): string[] {
         return this.memory.map(it => flatItem("memory", itemName(it.name), it.min, it.max));
     }
+
+    /**
+     * 转换数据为字符串
+     */
     private dataToString(): string[] {
         return this.data.map(it => {
             let memory: string;
@@ -352,9 +382,17 @@ export class Module {
             return flatItem("data", itemName(it.name), memory, offset, init);
         })
     }
+
+    /**
+     * 转换表格为字符串
+     */
     private tableToString(): string[] {
         return this.table.map(it => flatItem("table", itemName(it.name), it.min, it.max, "anyfunc"));
     }
+
+    /**
+     * 转换元素为字符串
+     */
     private elementToString(): string[] {
         return this.element.map(it => {
             let table: string;
@@ -372,10 +410,17 @@ export class Module {
         });
     }
 
+    /**
+     * 转换函数为字符串
+     * @param option 格式化配置
+     */
     private functionToString(option: Required<FormatOption>): string[] {
         return this.function.map(it => it.toString(option));
     }
 
+    /**
+     * 转换开始为字符串
+     */
     private startToString() {
         let start = this.start;
         if (start === undefined) {
@@ -387,6 +432,9 @@ export class Module {
         }
     }
 
+    /**
+     * 转换导出为字符串
+     */
     private exportToString(): string[] {
         let map = {
             [ImportExportType.Function]: "func",
@@ -402,6 +450,9 @@ export class Module {
         })
     }
 
+    /**
+     * 将指令中的索引立即数转换成为名称
+     */
     setImmediateIndexToName() {
         let env = new Env(this);
         for (let func of this.function) {

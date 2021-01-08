@@ -1,6 +1,6 @@
 export * as Code from "./Code";
-export * from "./Module";
-export type { Instruction, Block, LoopBlock, IfBlock } from "./Instruction";
-export * from "./Type";
-export * from "./Func";
 export * from "./Data";
+export * from "./Func";
+export type { Block, IfBlock, Instruction, LoopBlock } from "./Instruction";
+export * from "./Module";
+export * from "./Type";

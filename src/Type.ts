@@ -16,7 +16,11 @@ export type V128 =
     | { type: "v32x4", value: [I32, I32, I32, I32] }
     | { type: "v64x2", value: [I64, I64] }
 
-
+/**
+ * 判断值是否溢出
+ * @param bitCount 位数
+ * @param val 值
+ */
 function isI(bitCount: number, val: number): boolean {
     return -(2 ** (bitCount - 1)) <= val && val <= 2 ** bitCount;
 }
@@ -104,6 +108,11 @@ export function isV128(val: V128) {
     }
 }
 
+/**
+ * 判断两个签名是否一致
+ * @param t1 函数签名1
+ * @param t2 函数签名2
+ */
 export function isSameType(t1: TypeOption, t2: TypeOption) {
     let { params: t1Ps = [], results: t1Rs = [] } = t1;
     let { params: t2Ps = [], results: t2Rs = [] } = t2;
@@ -187,6 +196,9 @@ export enum BlockType {
     Empty = -0x40,
 }
 
+/**
+ * 块类型 -> 块的签名
+ */
 export const blockTypeMap: { type: BlockType, option: TypeOption }[] = [
     { type: BlockType.I32, option: { params: [], results: [Type.I32] } },
     { type: BlockType.I64, option: { params: [], results: [Type.I64] } },
@@ -353,6 +365,9 @@ export interface LimitOption {
     max?: U32;
 }
 
+/**
+ * 共有的导入配置
+ */
 export interface CommonImportOption {
     /**
      * 给导入项命名的名称
@@ -368,6 +383,9 @@ export interface CommonImportOption {
     importName: string
 }
 
+/**
+ * 函数导入配置
+ */
 export interface FunctionImportOption extends CommonImportOption {
     /**
      * 导入项的类型
@@ -383,6 +401,9 @@ export interface FunctionImportOption extends CommonImportOption {
     results?: Type[]
 }
 
+/**
+ * 表格导入配置
+ */
 export interface TableImportOption extends CommonImportOption {
     type: ImportExportType.Table,
     /**
@@ -399,6 +420,9 @@ export interface TableImportOption extends CommonImportOption {
     max?: U32
 }
 
+/**
+ * 内存导入配置
+ */
 export interface MemroyImportOption extends CommonImportOption {
     type: ImportExportType.Memory,
     /**
@@ -411,6 +435,9 @@ export interface MemroyImportOption extends CommonImportOption {
     max?: U32
 }
 
+/**
+ * 全局变量导入配置
+ */
 export interface GlobalImportOption extends CommonImportOption {
     type: ImportExportType.Global,
     /**
@@ -591,9 +618,9 @@ export interface ToBufferOption {
 }
 
 /**
- * 一般指令
+ * 共有的指令配置
  */
-export interface NormalInstructionOption {
+export interface CommonInstructionOption {
     /**
      * 指令名称
      */
@@ -606,7 +633,16 @@ export interface NormalInstructionOption {
      * 指令的立即数类型
      */
     readonly immediateTypes: readonly ImmediateType[];
+    /**
+     * 立即数对应的索引类型
+     */
     readonly immediateIndexTypes?: IndexType[];
+}
+
+/**
+ * 一般指令
+ */
+export interface NormalInstructionOption extends CommonInstructionOption {
     /**
      * 指令的参数类型
      */
@@ -620,20 +656,7 @@ export interface NormalInstructionOption {
 /**
  * 特殊指令
  */
-export interface SpecialInstructionOption {
-    /**
-     * 指令名称
-     */
-    readonly name: string;
-    /**
-     * 指令代码
-     */
-    readonly code: ArrayBuffer;
-    /**
-     * 指令的立即数类型
-     */
-    readonly immediateTypes: readonly ImmediateType[];
-    readonly immediateIndexTypes?: IndexType[];
+export interface SpecialInstructionOption extends CommonInstructionOption {
     /**
      * 指令的检查函数
      * @param option 检查配置项
@@ -711,11 +734,17 @@ export enum SectionType {
     DataSection = 11
 }
 
+/**
+ * 格式化配置
+ */
 export interface FormatOption {
     indent?: number;
     indentChar?: string;
 }
 
+/**
+ * 索引类型
+ */
 export enum IndexType {
     Function,
     Table,

@@ -89,7 +89,10 @@ export class Func {
         return { name, params: res, results };
     }
 
-    getLocalTypes(): LocalGroup[] {
+    /**
+     * 获取局部变量的类型和个数
+     */
+    getLocalTypesAndCount(): LocalGroup[] {
         let res: LocalGroup[] = [];
         let currentGroup: LocalGroup | undefined;
         for (let local of this.options.locals ?? []) {
@@ -107,6 +110,10 @@ export class Func {
         return res;
     }
 
+    /**
+     * 通过名称，查找局部变量的索引
+     * @param localIndex 名称
+     */
     findLocalIndex(localIndex: Index): number {
         if (typeof localIndex === "string") {
             let params = this.options.params || [];
@@ -146,6 +153,9 @@ export class Func {
         }
     }
 
+    /**
+     * 获取所有标签名称
+     */
     getLables(): (string | undefined)[] {
         let res: (string | undefined)[] = [];
 
@@ -157,6 +167,10 @@ export class Func {
         return res;
     }
 
+    /**
+     * 转换为缓存
+     * @param env 环境上下文
+     */
     toBuffer(env: Env): ArrayBuffer {
         let opt: ToBufferOption = {
             env,
@@ -173,39 +187,43 @@ export class Func {
         return combin(res);
     }
 
+    /**
+     * 转换为wat字符串
+     * @param option 格式化配置
+     */
     toString(option: Required<FormatOption>): string {
+        let params = this.options.params?.map(it => typeof it === "object" ?
+            flatItem("param", itemName(it.name), typeToString(it.type)) :
+            flatItem("param", typeToString(it))
+        ) ?? [];
+
+        let types = this.options.results?.map(typeToString) ?? [];
+        let results = types.length ? flatItem("result", ...types) : "";
+
+        let locals = this.options.locals?.map(it => typeof it === "object" ?
+            flatItem("local", itemName(it.name), typeToString(it.type)) :
+            flatItem("local", typeToString(it))
+        ) ?? [];
+
+        let codes = this.options.codes?.map(it => it.toString(option)) ?? [];
+
         return expandItem({
             option,
             header: [
                 "func",
                 itemName(this.name),
-                ...this.paramsToString(),
-                this.resultsToString(),
-                ...this.localsToString(),
+                ...params,
+                results,
+                ...locals,
             ],
-            body: this.codesToString(option)
+            body: codes
         })
     }
-    private paramsToString() {
-        return this.options.params?.map(it => typeof it === "object" ?
-            flatItem("param", itemName(it.name), typeToString(it.type)) :
-            flatItem("param", typeToString(it))
-        ) ?? [];
-    }
-    private resultsToString() {
-        let types = this.options.results?.map(typeToString) ?? [];
-        return types.length ? flatItem("result", ...types) : "";
-    }
-    private localsToString() {
-        return this.options.locals?.map(it => typeof it === "object" ?
-            flatItem("local", itemName(it.name), typeToString(it.type)) :
-            flatItem("local", typeToString(it))
-        ) ?? [];
-    }
-    private codesToString(option: Required<FormatOption>): string[] {
-        return this.options.codes?.map(it => it.toString(option)) ?? []
-    }
 
+    /**
+     * 将指令中的索引立即数转换成为名称
+     * @param env 环境上下文
+     */
     setImmediateIndexToName(env: Env) {
         for (let code of this.options.codes ?? []) {
             let block = new BlockProxy(this);
@@ -213,7 +231,11 @@ export class Func {
         }
     }
 
-    localIndexToName(idx: Index): Index {
+    /**
+     * 通过索引，查找局部变量名称
+     * @param idx 索引
+     */
+    findLocalName(idx: Index): Index {
         if (typeof idx === "string") {
             return idx;
         } else {
@@ -233,6 +255,9 @@ export class Func {
         }
     }
 
+    /**
+     * 获取所有块指令的签名
+     */
     getBlockTypes() {
         return this.options.codes?.flatMap(it => it.getBlockTypes()) ?? [];
     }
