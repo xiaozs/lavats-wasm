@@ -5,30 +5,30 @@ import { InnerModule } from "../src/InnerModule";
 
 let m = new Module({
     name: "module",
-    // memory: [
-    //     { "name": "memory", "min": 0 }
-    // ],
+    memory: [
+        { name: "memory", min: 0 }
+    ],
     data: [
-        { "name": "data", "offset": 0, "memoryIndex": 0, "init": data.i64(10).string("test").i64(10).toBuffer() }
+        { name: "data", offset: 0, memoryIndex: 0, init: data.i64(10).string("test").i64(10).toBuffer() }
     ],
     table: [
-        { "name": "table", "elementType": ElementType.funcref, "min": 0 }
+        { name: "table", elementType: ElementType.funcref, min: 0 }
     ],
     element: [
-        { "name": "element", "tableIndex": 0, "offset": 0, functionIndexes: [0] }
+        { name: "element", tableIndex: 0, offset: 0, functionIndexes: [0] }
     ],
     import: [
-        { name: "test", "module": "js", "importName": "test", "type": ImportExportType.Memory, "min": 0 },
-        { name: "imFunc", "module": "js", "importName": "imFunc", "type": ImportExportType.Function }
+        { name: "test", module: "js", importName: "test", type: ImportExportType.Memory, min: 0 },
+        { name: "imFunc", module: "js", importName: "imFunc", type: ImportExportType.Function }
     ],
     export: [
-        { "exportName": "js", "type": ImportExportType.Memory, index: "test" }
+        { exportName: "js", type: ImportExportType.Memory, index: "test" }
     ],
     type: [
         { name: "ifBlock", params: [Type.I32], results: [] }
     ],
     global: [
-        { "name": "global", "valueType": Type.I32, "init": 0 }
+        { name: "global", valueType: Type.I32, init: 0 }
     ],
     start: "start",
     function: [
@@ -42,12 +42,6 @@ let m = new Module({
                     label: "block",
                     type: { results: [Type.I32] },
                     codes: [
-                        Code.block({
-                            label: "block2",
-                            codes: [
-                                Code.call("imFunc"),
-                            ]
-                        }),
                         Code.i32.Const(50)
                     ]
                 }),
@@ -61,12 +55,6 @@ let m = new Module({
                     ],
                     else: [
                         Code.drop
-                    ]
-                }),
-                Code.i32.Const(10),
-                Code.If({
-                    else: [
-                        Code.nop
                     ]
                 })
             ]
