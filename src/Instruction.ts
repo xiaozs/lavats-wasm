@@ -901,7 +901,7 @@ export class IfBlock extends BlockInstruction {
             let elsePart = expandInstr({
                 option,
                 header: [],
-                body: thenContent,
+                body: elseContent,
                 end: "end"
             })
 
