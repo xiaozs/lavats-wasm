@@ -264,7 +264,8 @@ export class Module {
      * @param buffer 缓存
      */
     static fromBuffer(buffer: ArrayBuffer) {
-        return InnerModule.fromBuffer(buffer);
+        let innerModule = InnerModule.fromBuffer(buffer);
+        return innerModule.toModule();
     }
 
     /**

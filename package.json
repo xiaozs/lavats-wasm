@@ -36,5 +36,8 @@
   "bugs": {
     "url": "https://github.com/xiaozs/lavats-wasm/issues"
   },
-  "homepage": "https://github.com/xiaozs/lavats-wasm#readme"
+  "homepage": "https://github.com/xiaozs/lavats-wasm#readme",
+  "dependencies": {
+    "lavats": "^1.0.3"
+  }
 }
