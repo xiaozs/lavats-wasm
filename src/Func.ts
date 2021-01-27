@@ -43,6 +43,7 @@ export class Func {
             if (typeof val !== "object")
                 continue;
             let name = val.name;
+            if (!name) continue;
             let count = map[name] = (map[name] ?? 0) + 1;
             if (count >= 2)
                 throw new Error(`local ${name}: 命名冲突`);
