@@ -1,5 +1,5 @@
 # lavats-wasm
-lavats是一个由**typescript**写成的支持**umd**的**DSL式**的WebAssembly汇编器。
+lavats-wasm是一个由**typescript**写成的支持**umd**的**DSL式**的WebAssembly汇编器。
 
 ## 特色
 * 支持**typescript**的```*.d.ts```文件
@@ -48,7 +48,7 @@ import * as lavatsWasm from "lavats-wasm";
 
 ### \<script>
 ```html
-<script src="./node_modules/lavats/dist/index.js"></script>
+<script src="./node_modules/lavats-wasm/dist/index.js"></script>
 <script>
 
 lavatsWasm
