@@ -2,7 +2,6 @@ import { readFile, readFileSync, writeFileSync } from "fs";
 import { BlockType, Code, Func, ImportExportType, Module, Type, ElementType, data, DataType } from "../src";
 
 import { InnerModule } from "../src/InnerModule";
-import { watParser } from "../src/wat";
 
 let m = new Module({
     name: "module",
@@ -79,7 +78,3 @@ let [customSec] = test.getCustomSections("name");
 let nameSec = customSec?.toNameSection();
 let buf = nameSec.toBuffer();
 debugger;
-
-let astRes = watParser.match(wat, false);
-
-debugger

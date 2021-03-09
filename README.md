@@ -180,7 +180,7 @@ let wat = m.toString();
 ```
 
 ### 字符串转换为Module
-TODO
+请参考[lavats-wat](https://www.npmjs.com/package/lavats-wat)
 
 ### 模块校验
 ```javascript

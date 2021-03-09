@@ -1,6 +1,6 @@
 {
   "name": "lavats-wasm",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "",
   "main": "dist/index.js",
   "scripts": {
@@ -36,8 +36,5 @@
   "bugs": {
     "url": "https://github.com/xiaozs/lavats-wasm/issues"
   },
-  "homepage": "https://github.com/xiaozs/lavats-wasm#readme",
-  "dependencies": {
-    "lavats": "^1.0.3"
-  }
+  "homepage": "https://github.com/xiaozs/lavats-wasm#readme"
 }
